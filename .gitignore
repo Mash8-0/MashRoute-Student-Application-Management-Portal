@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.production
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Secrets / credentials (NEVER commit)
+backend/service-account-key.json
+**/service-account*.json
+*.pem
+*.key
+.env.*
+!.env.example
+!.env.production.example
+
+# Build output
+frontend/dist/
+backend/logs/
+
+# Uploaded files (keep folder structure, ignore contents)
+backend/uploads/**/*
+!backend/uploads/**/.gitkeep
+
+# Prisma
+backend/prisma/migrations/dev.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

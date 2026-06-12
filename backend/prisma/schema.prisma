@@ -1,0 +1,716 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  STAFF
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  REJECTED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  ACCEPTED
+  AWAITING_VERIFICATION
+  SENT_TO_UNIVERSITY
+  AWAITING_OFFER_LETTER
+  OFFER_LETTER_ISSUED
+  EMGS_PROCESSING
+  COMPLETED
+  REJECTED
+  // Legacy values — kept so existing rows are not broken
+  LOE_PROCESSING
+  LOE_APPROVED
+  PAYMENT_PENDING
+  EMGS_SUBMITTED
+  EMGS_APPROVED
+  EVAL_APPROVED
+  VISA_APPROVED
+  AIRPORT_CLEARANCE
+}
+
+enum DocumentType {
+  PASSPORT
+  SSC_CERTIFICATE
+  HSC_CERTIFICATE
+  DIPLOMA
+  BACHELOR_DEGREE
+  MASTERS_DEGREE
+  TRANSCRIPT
+  BANK_STATEMENT
+  IELTS_CERTIFICATE
+  PTE_CERTIFICATE
+  MOI_CERTIFICATE
+  PHOTO
+  OFFER_LETTER
+  EMGS_DOCUMENT
+  EVAL_DOCUMENT
+  VISA_DOCUMENT
+  MEDICAL_CERTIFICATE
+  ADDITIONAL
+  PASSPORT_FULL_SCAN
+  ACADEMIC_DOCUMENTS
+  ENGLISH_PROFICIENCY
+  FLIGHT_TICKET
+  PAYMENT_PROOF
+  TUITION_PROOF
+  INVOICE
+  TUITION_INVOICE
+}
+
+enum DocumentStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum NotificationType {
+  STATUS_CHANGED
+  DOCUMENT_MISSING
+  PAYMENT_PENDING
+  ASSIGNMENT
+  APPROVAL
+  REJECTION
+  SYSTEM
+}
+
+enum SubscriptionPlan {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ─── Tenants ──────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id                 String           @id @default(uuid())
+  name               String
+  slug               String           @unique
+  domain             String?          @unique
+  logo               String?
+  website            String?
+  email              String           @unique
+  phone              String?
+  address            String?
+  country            String?
+  status             TenantStatus     @default(PENDING)
+  plan               SubscriptionPlan @default(STARTER)
+  maxUsers           Int              @default(10)
+  maxStudents        Int              @default(100)
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
+  settings           Json?
+
+  createdSource       String?   @default("self_signup")
+  contactPersonName   String?
+  contactPersonEmail  String?
+  contactPersonPhone  String?
+  verificationType    String?
+  verificationDocUrl  String?
+  verificationDocName String?
+  submittedAt         DateTime?
+  approvedById        String?
+  approvedAt          DateTime?
+  rejectionReason     String?
+
+  // WhatsApp (Meta Cloud API) notifications — per-tenant toggle + config (recipients, events)
+  whatsappEnabled Boolean @default(false)
+  whatsappConfig  Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  users                 User[]
+  students              Student[]
+  applications          Application[]
+  universities          University[]
+  // Master universities assigned to this tenant by the super admin.
+  assignedUniversities  University[]                 @relation("UniversityAssignments")
+  universityCommissions UniversityCommission[]
+  commissionPolicies    UniversityCommissionPolicy[]
+  payments              Payment[]
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
+  subscriptions         Subscription[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(uuid())
+  tenantId          String?
+  email             String    @unique
+  password          String
+  firstName         String
+  lastName          String
+  phone             String?
+  avatar            String?
+  role              Role      @default(STAFF)
+  // Agent tier (STANDARD..MASTER) — drives per-university commission. See utils/agentCategories.js
+  agentCategory     String?   @default("STANDARD")
+  isActive          Boolean   @default(true)
+  isEmailVerified   Boolean   @default(false)
+  emailVerifyToken  String?
+  emailVerifyExpiry DateTime?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  refreshToken      String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  tenant                Tenant?           @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  assignedApplications  Application[]     @relation("AssignedAgent")
+  createdApplications   Application[]     @relation("CreatedBy")
+  acceptedApplications  Application[]     @relation("AcceptedBy")
+  uploadedOfferLetters  Application[]     @relation("OfferLetterUploadedBy")
+  uploadedPaymentProofs Application[]     @relation("PaymentProofUploadedBy")
+  verifiedPayments      Application[]     @relation("PaymentVerifiedBy")
+  issuedInvoices        Application[]     @relation("InvoiceIssuedBy")
+  uploadedEvisas        Application[]     @relation("EvisaUploadedBy")
+  uploadedTuitionProofs Application[]     @relation("TuitionProofUploadedBy")
+  verifiedTuitions      Application[]     @relation("TuitionVerifiedBy")
+  statusHistory         StatusHistory[]
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
+  extractionLogs        ExtractionLog[]
+  notes                 ApplicationNote[]
+  generatedLOEs         LOE[]             @relation("LOEGeneratedBy")
+  uploadedDocuments     Document[]        @relation("DocumentUploader")
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([role])
+}
+
+// ─── Students ─────────────────────────────────────────────────────────────────
+
+model Student {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  // Personal Info
+  fullName            String
+  passportNumber      String?
+  dateOfBirth         DateTime?
+  gender              Gender?
+  nationality         String?
+  phone               String?
+  whatsapp            String? // WhatsApp number for notifications (falls back to phone)
+  email               String?
+  address             String?
+  city                String?
+  country             String?
+  // Emergency & Sponsor
+  sponsorName         String?
+  sponsorContact      String?
+  emergencyContact    String?
+  emergencyPhone      String?
+  // Academic Info
+  sscGrade            String?
+  sscYear             Int?
+  sscInstitution      String?
+  hscGrade            String?
+  hscYear             Int?
+  hscInstitution      String?
+  diplomaGrade        String?
+  diplomaYear         Int?
+  diplomaInstitution  String?
+  bachelorGrade       String?
+  bachelorYear        Int?
+  bachelorInstitution String?
+  mastersGrade        String?
+  mastersYear         Int?
+  mastersInstitution  String?
+  gpa                 Decimal?  @db.Decimal(4, 2)
+  // English Proficiency
+  hasIELTS            Boolean   @default(false)
+  ieltsScore          Decimal?  @db.Decimal(3, 1)
+  ieltsExpiry         DateTime?
+  hasPTE              Boolean   @default(false)
+  pteScore            Int?
+  pteExpiry           DateTime?
+  hasMOI              Boolean   @default(false)
+  // Photo
+  photo               String?
+  // Google Drive
+  driveFolderId       String?
+  driveFolderName     String?
+  // Meta
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applications Application[]
+  documents    Document[]
+  payments     Payment[]
+
+  @@index([tenantId])
+  @@index([passportNumber])
+  @@index([fullName])
+}
+
+// ─── Universities ─────────────────────────────────────────────────────────────
+
+model University {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  name      String
+  code      String? // "University ID" set by super admin; used in document file names
+  country   String
+  city      String?
+  website   String?
+  email     String? // contact mail — offer-letter requests are sent here
+  phone     String?
+  courses   Json? // [{ level: 'Foundation'|'Diploma'|..., name: 'Foundation in Science' }]
+  intakes   Json? // admin-set intake labels, e.g. ["January 2026", "September 2026"]
+  logo      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant             Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applications       Application[]
+  // Super-admin master universities are assigned to one or more tenants.
+  assignedTenants    Tenant[]                     @relation("UniversityAssignments")
+  // Per-tenant commission rates by agent category.
+  commissions        UniversityCommission[]
+  commissionPolicies UniversityCommissionPolicy[]
+
+  @@index([tenantId])
+}
+
+// Tenant-scoped commission terms for a university (when/how commission is released).
+model UniversityCommissionPolicy {
+  id             String   @id @default(uuid())
+  tenantId       String
+  universityId   String
+  releaseTiming  String   @default("AFTER_REGISTRATION") // UPFRONT | AFTER_REGISTRATION | AFTER_ENROLLMENT | ON_COMPLETION
+  commissionType String? // e.g. "Claimable / Upfront"
+  payoutTime     String? // e.g. "30 to 60 Days"
+  payoutMethod   String? // e.g. "Bank Transfer"
+  specialBonus   String? // e.g. "If applicable" / "RM 500 per student"
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, universityId])
+  @@index([universityId])
+}
+
+// Commission a tenant pays/earns for a university, by agent tier.
+// Tenant-scoped because the same master university is shared across many tenants.
+model UniversityCommission {
+  id           String   @id @default(uuid())
+  tenantId     String
+  universityId String
+  course       String   @default("") // program/course name; "" = applies to all programs (default)
+  category     String // agent category value (STANDARD..MASTER)
+  amount       Float    @default(0)
+  type         String   @default("FIXED") // 'FIXED' | 'PERCENTAGE'
+  currency     String   @default("MYR")
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, universityId, course, category])
+  @@index([tenantId])
+  @@index([universityId])
+}
+
+// ─── Applications ─────────────────────────────────────────────────────────────
+
+model Application {
+  id                         String            @id @default(uuid())
+  tenantId                   String
+  studentId                  String
+  universityId               String?
+  agentId                    String?
+  createdById                String?
+  // Application Details
+  referenceNo                String            @unique
+  program                    String?
+  intake                     String?
+  intakeYear                 Int?
+  country                    String?
+  status                     ApplicationStatus @default(DRAFT)
+  priority                   Priority          @default(MEDIUM)
+  progressPct                Int               @default(0)
+  // Rejection
+  rejectionReason            String?
+  // Acceptance
+  isAccepted                 Boolean           @default(false)
+  acceptedById               String?
+  acceptedAt                 DateTime?
+  // Offer Letter
+  offerLetterUrl             String?
+  offerLetterUploadedById    String?
+  offerLetterUploadedAt      DateTime?
+  // Payment Proof
+  paymentProofUrl            String?
+  paymentProofUploadedById   String?
+  paymentProofUploadedAt     DateTime?
+  // Payment Verification
+  paymentVerifiedById        String?
+  paymentVerifiedAt          DateTime?
+  // Invoice
+  invoiceIssuedById          String?
+  invoiceIssuedAt            DateTime?
+  // EMGS Progress
+  emgsPercentage             Int               @default(0)
+  // Post-eVAL workflow (separate from the EMGS percentage; only active once 70% eVAL Approved is reached)
+  // null | AWAITING_EVISA | EVISA_APPROVED | UNDER_ARRIVAL | ARRIVAL_COMPLETED
+  postEvalStatus             String?
+  // Post-eVAL approval letters (uploaded in the "Awaiting for eVisa" stage)
+  emgsApprovalUrl            String?
+  emgsApprovalUploadedById   String?
+  emgsApprovalUploadedAt     DateTime?
+  evalApprovalUrl            String?
+  evalApprovalUploadedById   String?
+  evalApprovalUploadedAt     DateTime?
+  // eVisa (post-EVAL stage)
+  evisaUrl                   String?
+  evisaUploadedById          String?
+  evisaUploadedAt            DateTime?
+  // Arrival
+  arrivalDate                DateTime?
+  flightDate                 DateTime?
+  arrivalStatus              String?
+  flightTicketUrl            String?
+  // Tuition Proof / Verification / Invoice
+  tuitionProofUrl            String?
+  tuitionProofUploadedById   String?
+  tuitionProofUploadedAt     DateTime?
+  tuitionVerificationStatus  String?           @default("NONE") // NONE | PENDING | VERIFIED | REJECTED
+  tuitionVerificationRemarks String?
+  tuitionVerifiedById        String?
+  tuitionVerifiedAt          DateTime?
+  tuitionInvoiceIssuedById   String?
+  tuitionInvoiceIssuedAt     DateTime?
+  // Commission payout tracking (drives commission_eligible / commission_paid notifications)
+  commissionStatus           String?           @default("PENDING") // PENDING | ELIGIBLE | PAID
+  commissionStatusAt         DateTime?
+  // Meta
+  submittedAt                DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  deletedAt                  DateTime?
+
+  tenant                 Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student                Student           @relation(fields: [studentId], references: [id])
+  university             University?       @relation(fields: [universityId], references: [id])
+  agent                  User?             @relation("AssignedAgent", fields: [agentId], references: [id])
+  createdBy              User?             @relation("CreatedBy", fields: [createdById], references: [id])
+  acceptedBy             User?             @relation("AcceptedBy", fields: [acceptedById], references: [id])
+  offerLetterUploadedBy  User?             @relation("OfferLetterUploadedBy", fields: [offerLetterUploadedById], references: [id])
+  paymentProofUploadedBy User?             @relation("PaymentProofUploadedBy", fields: [paymentProofUploadedById], references: [id])
+  paymentVerifiedBy      User?             @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id])
+  invoiceIssuedBy        User?             @relation("InvoiceIssuedBy", fields: [invoiceIssuedById], references: [id])
+  evisaUploadedBy        User?             @relation("EvisaUploadedBy", fields: [evisaUploadedById], references: [id])
+  tuitionProofUploadedBy User?             @relation("TuitionProofUploadedBy", fields: [tuitionProofUploadedById], references: [id])
+  tuitionVerifiedBy      User?             @relation("TuitionVerifiedBy", fields: [tuitionVerifiedById], references: [id])
+  documents              Document[]
+  payments               Payment[]
+  statusHistory          StatusHistory[]
+  notes                  ApplicationNote[]
+  notifications          Notification[]
+  loe                    LOE?
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([agentId])
+  @@index([status])
+  @@index([referenceNo])
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
+model Document {
+  id                 String         @id @default(uuid())
+  tenantId           String
+  studentId          String
+  applicationId      String?
+  uploadedById       String?
+  uploadedBy         User?          @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  type               DocumentType
+  status             DocumentStatus @default(PENDING)
+  originalName       String
+  fileName           String
+  fileUrl            String
+  fileSize           Int?
+  mimeType           String?
+  publicId           String?
+  driveViewLink      String?
+  fileSource         String?        @default("local")
+  driveFolderId      String?
+  expiryDate         DateTime?
+  notes              String?
+  documentStage      String?
+  verificationStatus String?        @default("NONE")
+  verifiedById       String?
+  verifiedAt         DateTime?
+  rejectedReason     String?
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+
+  student        Student         @relation(fields: [studentId], references: [id])
+  application    Application?    @relation(fields: [applicationId], references: [id])
+  extractionLogs ExtractionLog[]
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([applicationId])
+  @@index([type])
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+model Payment {
+  id            String        @id @default(uuid())
+  tenantId      String
+  studentId     String
+  applicationId String?
+  invoiceNo     String        @unique
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("USD")
+  status        PaymentStatus @default(PENDING)
+  dueDate       DateTime?
+  paidAt        DateTime?
+  receiptUrl    String?
+  notes         String?
+  description   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student     Student      @relation(fields: [studentId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([tenantId])
+  @@index([studentId])
+  @@index([status])
+  @@index([invoiceNo])
+}
+
+// ─── Status History ───────────────────────────────────────────────────────────
+
+model StatusHistory {
+  id             String             @id @default(uuid())
+  applicationId  String
+  changedById    String?
+  fromStatus     ApplicationStatus?
+  toStatus       ApplicationStatus
+  notes          String?
+  emgsPercentage Int?
+  createdAt      DateTime           @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy   User?       @relation(fields: [changedById], references: [id])
+
+  @@index([applicationId])
+}
+
+// ─── Application Notes ────────────────────────────────────────────────────────
+
+model ApplicationNote {
+  id            String   @id @default(uuid())
+  applicationId String
+  authorId      String?
+  content       String
+  isPrivate     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User?       @relation(fields: [authorId], references: [id])
+
+  @@index([applicationId])
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id            String           @id @default(uuid())
+  tenantId      String?
+  userId        String
+  applicationId String?
+  type          NotificationType
+  title         String
+  message       String
+  isRead        Boolean          @default(false)
+  readAt        DateTime?
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+
+  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([isRead])
+}
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// ─── AI Extraction Logs ───────────────────────────────────────────────────────
+
+model ExtractionLog {
+  id            String   @id @default(uuid())
+  documentId    String
+  userId        String?
+  provider      String   @default("tesseract")
+  status        String   @default("pending")
+  extractedData Json?
+  rawText       String?  @db.Text
+  confidence    Decimal? @db.Decimal(5, 2)
+  errorMessage  String?
+  processingMs  Int?
+  createdAt     DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([documentId])
+}
+
+// ─── Subscriptions ────────────────────────────────────────────────────────────
+
+model Subscription {
+  id        String           @id @default(uuid())
+  tenantId  String
+  plan      SubscriptionPlan
+  price     Decimal          @db.Decimal(10, 2)
+  currency  String           @default("USD")
+  startsAt  DateTime
+  endsAt    DateTime?
+  isActive  Boolean          @default(true)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model LOE {
+  id                 String      @id @default(cuid())
+  applicationId      String      @unique
+  application        Application @relation(fields: [applicationId], references: [id])
+  tenantId           String
+  loeNumber          String      @unique
+  templateName       String      @default("IIMAT_LOE")
+  status             String      @default("DRAFT")
+  generatedAt        DateTime?
+  generatedById      String?
+  generatedBy        User?       @relation("LOEGeneratedBy", fields: [generatedById], references: [id])
+  fileUrl            String?
+  uploadedFileUrl    String?
+  scholarshipPct     Float       @default(50)
+  tuitionPerYear     Float       @default(18020)
+  programDuration    String      @default("2.5 Years")
+  facultyName        String      @default("School of Social Science")
+  englishRequirement String      @default("English Placement Test required")
+  additionalNotes    String?
+  version            Int         @default(1)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+// ─── WhatsApp notification log ────────────────────────────────────────────────
+// Append-only audit of every WhatsApp template message attempt (sent or failed).
+model WhatsAppLog {
+  id               String    @id @default(uuid())
+  tenantId         String
+  applicationId    String?
+  recipientName    String?
+  recipientPhone   String
+  recipientRole    String? // TENANT_ADMIN | STAFF | AGENT | STUDENT
+  templateName     String
+  messageStatus    String    @default("PENDING") // SENT | FAILED | SKIPPED
+  providerResponse Json?
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([applicationId])
+  @@index([messageStatus])
+}

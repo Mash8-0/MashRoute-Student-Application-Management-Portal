@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/macminim2/MashRoute/frontend/logs/.071a8e84478e9a4c48561958c408f9574047f8f0-audit.json",
+    "files": [
+        {
+            "date": 1780074964950,
+            "name": "/Users/macminim2/MashRoute/frontend/logs/error-2026-05-30.log",
+            "hash": "edbbee9d2ed49042d0a43ff8b13313641ef1284c65ff6faa631a2ce41441cde0"
+        }
+    ],
+    "hashType": "sha256"
+}
