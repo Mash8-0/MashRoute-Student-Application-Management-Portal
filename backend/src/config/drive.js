@@ -6,6 +6,8 @@ const fs = require('fs');
  * Returns true only when all three Drive credentials are non-empty strings.
  */
 function isDriveConfigured() {
+  // Explicit opt-out: when USE_LOCAL_STORAGE=true, never attempt Drive.
+  if (String(process.env.USE_LOCAL_STORAGE).toLowerCase() === 'true') return false;
   const folderId     = (process.env.GOOGLE_DRIVE_FOLDER_ID || '').trim();
   const clientId     = (process.env.GOOGLE_CLIENT_ID       || '').trim();
   const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN   || '').trim();

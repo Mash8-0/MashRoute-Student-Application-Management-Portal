@@ -54,42 +54,49 @@ async function uploadStudentDocument(file, docTitle, folderName, existingFolderI
   if (!isDriveConfigured()) return _localFallback(file);
   if (!ROOT_FOLDER_ID()) return _localFallback(file);
 
-  const drive = getDriveClient();
+  try {
+    const drive = getDriveClient();
 
-  // Resolve student folder
-  const folderId = await getOrCreateStudentFolder(drive, folderName, existingFolderId);
+    // Resolve student folder
+    const folderId = await getOrCreateStudentFolder(drive, folderName, existingFolderId);
 
-  // Build clean filename: "Passport Information Page - MD RAHIM - A12345.pdf"
-  const ext = path.extname(file.originalname) || '';
-  const cleanDocTitle = docTitle.replace(/[/\\?%*:|"<>]/g, '-');
-  const cleanFolder = folderName.replace(/[/\\?%*:|"<>]/g, '-');
-  const fileName = `${cleanDocTitle} - ${cleanFolder}${ext}`;
+    // Build clean filename: "Passport Information Page - MD RAHIM - A12345.pdf"
+    const ext = path.extname(file.originalname) || '';
+    const cleanDocTitle = docTitle.replace(/[/\\?%*:|"<>]/g, '-');
+    const cleanFolder = folderName.replace(/[/\\?%*:|"<>]/g, '-');
+    const fileName = `${cleanDocTitle} - ${cleanFolder}${ext}`;
 
-  const media = { mimeType: file.mimetype, body: fs.createReadStream(file.path) };
+    const media = { mimeType: file.mimetype, body: fs.createReadStream(file.path) };
 
-  const response = await drive.files.create({
-    requestBody: { name: fileName, parents: [folderId] },
-    media,
-    fields: 'id',
-    supportsAllDrives: true,
-  });
-  const fileId = response.data.id;
+    const response = await drive.files.create({
+      requestBody: { name: fileName, parents: [folderId] },
+      media,
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+    const fileId = response.data.id;
 
-  // Make publicly readable
-  await drive.permissions.create({
-    fileId,
-    requestBody: { role: 'reader', type: 'anyone' },
-    supportsAllDrives: true,
-  });
+    // Make publicly readable
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: 'reader', type: 'anyone' },
+      supportsAllDrives: true,
+    });
 
-  if (!file._keepOnDisk) fs.unlink(file.path, () => {});
+    if (!file._keepOnDisk) fs.unlink(file.path, () => {});
 
-  return {
-    fileUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
-    driveFileId: fileId,
-    viewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-    driveFolderId: folderId,
-  };
+    return {
+      fileUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
+      driveFileId: fileId,
+      viewUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+      driveFolderId: folderId,
+    };
+  } catch (err) {
+    // Drive down / refresh token expired → degrade to local storage instead of
+    // failing the upload (matches uploadToDrive / uploadNamedDocument behaviour).
+    console.warn(`[driveUpload] Student doc upload failed (${err?.message}); using local storage fallback.`);
+    return _localFallback(file);
+  }
 }
 
 /**

@@ -147,7 +147,12 @@
       "Bash(chmod +x deploy/deploy.sh)",
       "Bash(NODE_ENV=production PORT=3999 timeout 6 node -e ' *)",
       "Bash(node -e \"require\\('./src/app'\\); console.log\\('production app module loads cleanly'\\)\")",
-      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); require\\('./src/app'\\); console.log\\('OK app loads'\\)\")"
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); require\\('./src/app'\\); console.log\\('OK app loads'\\)\")",
+      "Bash(git -c user.name=MashRoute -c user.email=mashrur.personal.sam@gmail.com commit -q -m ' *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); const {isDriveConfigured}=require\\('./src/config/drive'\\); console.log\\('USE_LOCAL_STORAGE=',process.env.USE_LOCAL_STORAGE,'-> isDriveConfigured\\(\\):', isDriveConfigured\\(\\), '\\(false = uploads go to local storage, no error\\)'\\);\")",
+      "Bash(node -e \"require\\('./src/services/driveUpload'\\); require\\('./src/modules/documents/document.service'\\); console.log\\('OK modules load'\\);\")",
+      "Bash(curl -s -o /dev/null -w \"backend health: %{http_code}\\\\n\" http://localhost:3001/health)",
+      "Bash(git add *)"
     ],
     "additionalDirectories": [
       "/Users/macminim2/MashRoute/backend/uploads/temp",
