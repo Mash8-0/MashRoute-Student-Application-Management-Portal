@@ -336,7 +336,7 @@ function FileUploadModal({ title, onClose, onUpload, uploading }) {
             <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
             {file
               ? <p className="text-sm font-medium text-primary">{file.name}</p>
-              : <p className="text-sm text-muted-foreground">Click to select file (PDF, JPEG, PNG — max 10MB)</p>}
+              : <p className="text-sm text-muted-foreground">Click to select file (PDF, JPEG, PNG — max 15MB)</p>}
           </div>
           <input
             id="file-upload-input"
