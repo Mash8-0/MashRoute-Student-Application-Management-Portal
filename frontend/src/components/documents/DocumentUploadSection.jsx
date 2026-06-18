@@ -157,6 +157,9 @@ function UploadCard({ docDef, studentId, applicationId, onUploaded }) {
           <p className="mt-1 text-xs text-muted-foreground/70">
             Accepted formats: {docDef.acceptLabel}
           </p>
+          <p className="mt-1 text-xs font-semibold text-red-500">
+            Maximum file size: 15 MB
+          </p>
           <p className="mt-1 text-xs text-muted-foreground/50">
             Click to browse or drag and drop file here
           </p>
