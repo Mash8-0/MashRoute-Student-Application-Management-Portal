@@ -231,68 +231,75 @@ model User {
 // ─── Students ─────────────────────────────────────────────────────────────────
 
 model Student {
-  id                  String    @id @default(uuid())
-  tenantId            String
+  id                       String    @id @default(uuid())
+  tenantId                 String
   // Personal Info
-  fullName            String
-  passportNumber      String?
-  dateOfBirth         DateTime?
-  gender              Gender?
-  nationality         String?
-  phone               String?
-  whatsapp            String? // WhatsApp number for notifications (falls back to phone)
-  email               String?
-  address             String?
-  city                String?
-  country             String?
+  fullName                 String
+  passportNumber           String?
+  passportNumberNormalized String?
+  dateOfBirth              DateTime?
+  gender                   Gender?
+  nationality              String?
+  phone                    String?
+  whatsapp                 String? // WhatsApp number for notifications (falls back to phone)
+  email                    String?
+  address                  String?
+  city                     String?
+  country                  String?
   // Emergency & Sponsor
-  sponsorName         String?
-  sponsorContact      String?
-  emergencyContact    String?
-  emergencyPhone      String?
+  sponsorName              String?
+  sponsorContact           String?
+  emergencyContact         String?
+  emergencyPhone           String?
   // Academic Info
-  sscGrade            String?
-  sscYear             Int?
-  sscInstitution      String?
-  hscGrade            String?
-  hscYear             Int?
-  hscInstitution      String?
-  diplomaGrade        String?
-  diplomaYear         Int?
-  diplomaInstitution  String?
-  bachelorGrade       String?
-  bachelorYear        Int?
-  bachelorInstitution String?
-  mastersGrade        String?
-  mastersYear         Int?
-  mastersInstitution  String?
-  gpa                 Decimal?  @db.Decimal(4, 2)
+  sscGrade                 String?
+  sscYear                  Int?
+  sscInstitution           String?
+  hscGrade                 String?
+  hscYear                  Int?
+  hscInstitution           String?
+  diplomaGrade             String?
+  diplomaYear              Int?
+  diplomaInstitution       String?
+  bachelorGrade            String?
+  bachelorYear             Int?
+  bachelorInstitution      String?
+  mastersGrade             String?
+  mastersYear              Int?
+  mastersInstitution       String?
+  phdGrade                 String?
+  phdYear                  Int?
+  phdInstitution           String?
+  gpa                      Decimal?  @db.Decimal(4, 2)
   // English Proficiency
-  hasIELTS            Boolean   @default(false)
-  ieltsScore          Decimal?  @db.Decimal(3, 1)
-  ieltsExpiry         DateTime?
-  hasPTE              Boolean   @default(false)
-  pteScore            Int?
-  pteExpiry           DateTime?
-  hasMOI              Boolean   @default(false)
+  hasIELTS                 Boolean   @default(false)
+  ieltsScore               Decimal?  @db.Decimal(3, 1)
+  ieltsExpiry              DateTime?
+  hasPTE                   Boolean   @default(false)
+  pteScore                 Int?
+  pteExpiry                DateTime?
+  hasMOI                   Boolean   @default(false)
   // Photo
-  photo               String?
+  photo                    String?
   // Google Drive
-  driveFolderId       String?
-  driveFolderName     String?
+  driveFolderId            String?
+  driveFolderName          String?
   // Meta
-  isActive            Boolean   @default(true)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  deletedAt           DateTime?
+  isActive                 Boolean   @default(true)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   applications Application[]
   documents    Document[]
   payments     Payment[]
 
+  @@unique([tenantId, passportNumberNormalized], name: "student_tenant_passport_normalized_unique", map: "student_tenant_passport_normalized_unique")
   @@index([tenantId])
   @@index([passportNumber])
+  @@index([tenantId, email])
+  @@index([tenantId, phone])
   @@index([fullName])
 }
 

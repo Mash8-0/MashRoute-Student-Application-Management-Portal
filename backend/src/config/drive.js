@@ -43,6 +43,12 @@ function getOAuth2Client() {
 }
 
 function getRedirectUrl() {
+  const explicitRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+  if (explicitRedirect) return explicitRedirect;
+
+  const publicApiUrl = (process.env.PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+  if (publicApiUrl) return `${publicApiUrl}/api/v1/drive-auth/callback`;
+
   const port = process.env.PORT || 3001;
   return `http://localhost:${port}/api/v1/drive-auth/callback`;
 }

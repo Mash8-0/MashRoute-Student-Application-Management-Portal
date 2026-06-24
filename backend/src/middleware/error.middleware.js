@@ -24,7 +24,11 @@ const errorMiddleware = (err, req, res, next) => {
       ? 'Internal server error'
       : err.message || 'Something went wrong';
 
-  res.status(statusCode).json({ success: false, message });
+  const response = { success: false };
+  if (err.code) response.code = err.code;
+  response.message = message;
+
+  res.status(statusCode).json(response);
 };
 
 module.exports = errorMiddleware;

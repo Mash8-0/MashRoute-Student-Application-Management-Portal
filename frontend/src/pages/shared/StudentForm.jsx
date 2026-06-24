@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -14,12 +14,20 @@ const COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua
 
 const schema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
-  passportNumber: z.string().optional(),
+  passportNumber: z.string()
+    .trim()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9\s-]{2,29}$/, 'Invalid passport number')
+    .optional()
+    .or(z.literal('')),
   nationality: z.string().optional(),
   dateOfBirth: z.string().optional(),
   gender: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
-  phone: z.string().optional(),
+  phone: z.string()
+    .trim()
+    .regex(/^\+?[0-9().\-\s]{5,30}$/, 'Invalid phone number')
+    .optional()
+    .or(z.literal('')),
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
@@ -90,21 +98,31 @@ export default function StudentForm() {
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const savingRef = useRef(false);
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, watch, setFocus, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { hasIELTS: false, hasPTE: false, hasMOI: false },
   });
 
   const hasIELTS = watch('hasIELTS');
   const hasPTE = watch('hasPTE');
+  const actionLabel = isEdit ? 'Update Student' : 'Create Student';
+  const savingLabel = isEdit ? 'Updating Student...' : 'Creating Student...';
 
   useEffect(() => {
     if (!isEdit) return;
     studentAPI.get(id).then((res) => {
       const s = res.data.data;
+      // The API returns null for empty optional fields, but the zod string
+      // validators reject null ("Expected string, received null"), which would
+      // block every update. Coerce nulls to empty strings before populating.
+      const sanitized = Object.fromEntries(
+        Object.entries(s).map(([k, v]) => [k, v === null ? '' : v])
+      );
       reset({
-        ...s,
+        ...sanitized,
         dateOfBirth: s.dateOfBirth ? s.dateOfBirth.split('T')[0] : '',
         ieltsExpiry: s.ieltsExpiry ? s.ieltsExpiry.split('T')[0] : '',
         sscYear: s.sscYear?.toString() || '',
@@ -127,35 +145,82 @@ export default function StudentForm() {
     });
   }, [id, isEdit, reset, navigate]);
 
+  const toOptionalNumber = (value, parser) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    return parser(value);
+  };
+
+  const normalizePayload = (data) => ({
+    ...data,
+    passportNumber: typeof data.passportNumber === 'string'
+      ? data.passportNumber.trim().toUpperCase()
+      : data.passportNumber,
+    gpa: toOptionalNumber(data.gpa, parseFloat),
+    ieltsScore: toOptionalNumber(data.ieltsScore, parseFloat),
+    pteScore: toOptionalNumber(data.pteScore, (v) => parseInt(v, 10)),
+    sscYear: toOptionalNumber(data.sscYear, (v) => parseInt(v, 10)),
+    hscYear: toOptionalNumber(data.hscYear, (v) => parseInt(v, 10)),
+    diplomaYear: toOptionalNumber(data.diplomaYear, (v) => parseInt(v, 10)),
+    bachelorYear: toOptionalNumber(data.bachelorYear, (v) => parseInt(v, 10)),
+    mastersYear: toOptionalNumber(data.mastersYear, (v) => parseInt(v, 10)),
+    phdYear: toOptionalNumber(data.phdYear, (v) => parseInt(v, 10)),
+  });
+
+  const getSaveMessage = (err) => {
+    const errorData = err.response?.data;
+    if (errorData?.code === 'STUDENT_ALREADY_EXISTS') return 'Student Record Already Exists';
+    if (err.response?.status === 401) return 'Unauthorized action';
+    if (err.response?.status === 403) return 'Unauthorized action';
+    if (err.response?.status === 404) return 'Student not found';
+    if (errorData?.message) return errorData.message;
+    if (err.request && !err.response) return 'Network error';
+    return 'Server error';
+  };
+
   const onSubmit = async (data) => {
+    if (savingRef.current) return;
+    if (isEdit && !id) {
+      setSaveError('Missing student ID');
+      toast.error('Missing student ID');
+      return;
+    }
+
+    savingRef.current = true;
+    setSaveError('');
     setSaving(true);
-    const payload = {
-      ...data,
-      gpa: data.gpa ? parseFloat(data.gpa) : undefined,
-      ieltsScore: data.ieltsScore ? parseFloat(data.ieltsScore) : undefined,
-      pteScore: data.pteScore ? parseInt(data.pteScore) : undefined,
-      sscYear: data.sscYear ? parseInt(data.sscYear) : undefined,
-      hscYear: data.hscYear ? parseInt(data.hscYear) : undefined,
-      diplomaYear: data.diplomaYear ? parseInt(data.diplomaYear) : undefined,
-      bachelorYear: data.bachelorYear ? parseInt(data.bachelorYear) : undefined,
-      mastersYear: data.mastersYear ? parseInt(data.mastersYear) : undefined,
-      phdYear: data.phdYear ? parseInt(data.phdYear) : undefined,
-    };
+    const payload = normalizePayload(data);
     try {
       if (isEdit) {
         await studentAPI.update(id, payload);
-        toast.success('Student updated');
+        toast.success('Student updated successfully.');
         navigate(`/students/${id}`);
       } else {
         const res = await studentAPI.create(payload);
-        toast.success('Student created');
+        toast.success('Student created successfully.');
         navigate(`/students/${res.data.data.id}`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save student');
+      console.error('Student save failed', {
+        mode: isEdit ? 'update' : 'create',
+        status: err.response?.status,
+        code: err.response?.data?.code,
+        message: err.response?.data?.message || err.message,
+      });
+      const message = getSaveMessage(err);
+      setSaveError(message);
+      toast.error(message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
+  };
+
+  const onInvalid = (formErrors) => {
+    const firstField = Object.keys(formErrors)[0];
+    const message = formErrors[firstField]?.message || 'Please fix the highlighted fields';
+    setSaveError(message);
+    toast.error(message);
+    if (firstField) setFocus(firstField);
   };
 
   if (loading) {
@@ -167,7 +232,7 @@ export default function StudentForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button type="button" variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-9 w-9 flex-shrink-0">
@@ -181,9 +246,15 @@ export default function StudentForm() {
         </div>
         <Button type="submit" disabled={saving} size="sm">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saving ? 'Saving...' : 'Save Student'}
+          {saving ? savingLabel : actionLabel}
         </Button>
       </div>
+
+      {saveError && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+          {saveError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left + Centre */}
@@ -196,7 +267,7 @@ export default function StudentForm() {
                 <Field label="Full Name" error={errors.fullName?.message} required>
                   <Input {...register('fullName')} placeholder="e.g. Ahmad Rahman" />
                 </Field>
-                <Field label="Passport Number">
+                <Field label="Passport Number" error={errors.passportNumber?.message}>
                   <Input {...register('passportNumber')} placeholder="e.g. A12345678" />
                 </Field>
                 <Field label="Nationality">
@@ -216,10 +287,10 @@ export default function StudentForm() {
                     <option value="OTHER">Other</option>
                   </select>
                 </Field>
-                <Field label="Email">
+                <Field label="Email" error={errors.email?.message}>
                   <Input type="email" {...register('email')} placeholder="student@email.com" />
                 </Field>
-                <Field label="Phone">
+                <Field label="Phone" error={errors.phone?.message}>
                   <Input {...register('phone')} placeholder="+880 1xxx-xxxxxx" />
                 </Field>
                 <Field label="City">
@@ -386,7 +457,7 @@ export default function StudentForm() {
 
           <Button type="submit" disabled={saving} className="w-full">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? 'Saving...' : isEdit ? 'Update Student' : 'Create Student'}
+            {saving ? savingLabel : actionLabel}
           </Button>
         </div>
       </div>

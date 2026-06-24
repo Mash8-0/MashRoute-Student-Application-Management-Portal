@@ -19,7 +19,7 @@ const getStudent = asyncHandler(async (req, res) => {
 
 const updateStudent = asyncHandler(async (req, res) => {
   const student = await studentService.updateStudent(req.params.id, req.tenantId, req.body);
-  return ApiResponse.success(res, student, 'Student updated');
+  return ApiResponse.success(res, student, 'Student updated successfully');
 });
 
 const deleteStudent = asyncHandler(async (req, res) => {

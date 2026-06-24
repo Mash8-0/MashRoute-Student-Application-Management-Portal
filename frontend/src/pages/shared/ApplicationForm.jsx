@@ -106,7 +106,7 @@ export default function ApplicationForm() {
     const prog = watch('program');
     const found = univCourses.find((c) => c.name === prog);
     if (found) setLevel(found.level);
-  }, [hasCourses, selectedUnivId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasCourses, selectedUnivId]);
 
   // Whose commission applies: the assigned agent's tier, else the current user's (if staff).
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
