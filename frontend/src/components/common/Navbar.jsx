@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Search, Sun, Moon, ChevronDown } from 'lucide-react';
+import { Bell, Search, Sun, Moon, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
@@ -10,7 +10,7 @@ import { toast } from '../ui/toast';
 
 export default function Navbar() {
   const { user } = useAuthStore();
-  const { darkMode, toggleDarkMode, unreadCount, setNotifications, notifications, markNotificationRead, markAllRead } = useUIStore();
+  const { darkMode, toggleDarkMode, unreadCount, setNotifications, notifications, markNotificationRead, markAllRead, setSidebarOpen } = useUIStore();
   const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
@@ -40,7 +40,17 @@ export default function Navbar() {
   };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
+    <header className="flex h-16 items-center justify-between border-b border-border bg-card px-4 sm:px-6">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => setSidebarOpen(true)}
+        className="mr-2 h-9 w-9 lg:hidden"
+        aria-label="Open navigation menu"
+      >
+        <Menu className="h-4 w-4" />
+      </Button>
+
       {/* Search */}
       <div className="relative hidden sm:block">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

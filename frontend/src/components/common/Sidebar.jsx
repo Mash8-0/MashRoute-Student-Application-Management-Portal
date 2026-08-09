@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, GraduationCap, FileText, CreditCard,
   Building2, Settings, LogOut, ChevronLeft, ChevronRight,
-  BarChart3, Bell, BookOpen, Globe, Activity, ClipboardCheck, Wallet,
+  BarChart3, BookOpen, Globe, Activity, ClipboardCheck, Wallet,
 } from 'lucide-react';
 import { cn, getInitials } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
@@ -43,9 +43,9 @@ const navConfig = {
   ],
 };
 
-export default function Sidebar() {
+export default function Sidebar({ mobile = false }) {
   const { user, logout } = useAuthStore();
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
   const navigate = useNavigate();
 
   const navItems = navConfig[user?.role] || navConfig.STAFF;
@@ -56,17 +56,21 @@ export default function Sidebar() {
     navigate('/login');
   };
 
+  const handleNavClick = () => {
+    if (mobile) setSidebarOpen(false);
+  };
+
   return (
-    <div className="relative h-full flex-shrink-0">
+    <div className="relative z-10 h-full flex-shrink-0">
     <motion.aside
-      animate={{ width: sidebarOpen ? 240 : 72 }}
+      animate={{ width: mobile || sidebarOpen ? 240 : 72 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
       className="relative flex h-full flex-col border-r border-border bg-card overflow-hidden"
     >
       {/* Logo */}
       <div className="flex h-20 items-center justify-center border-b border-border px-4">
         <AnimatePresence initial={false} mode="wait">
-          {sidebarOpen ? (
+          {mobile || sidebarOpen ? (
             <motion.div
               key="logo-full"
               initial={{ opacity: 0 }}
@@ -123,7 +127,7 @@ export default function Sidebar() {
 
       {/* Company brand (tenant) */}
       <AnimatePresence initial={false}>
-        {sidebarOpen && user?.tenant?.name && (
+        {(mobile || sidebarOpen) && user?.tenant?.name && (
           <motion.div
             key="company-brand"
             initial={{ opacity: 0, height: 0 }}
@@ -150,6 +154,7 @@ export default function Sidebar() {
             key={item.path}
             to={item.path}
             end={item.path === '/dashboard' || item.path === '/super-admin'}
+            onClick={handleNavClick}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
@@ -160,7 +165,7 @@ export default function Sidebar() {
           >
             <item.icon className="h-4 w-4 flex-shrink-0" />
             <AnimatePresence>
-              {sidebarOpen && (
+              {(mobile || sidebarOpen) && (
                 <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -183,7 +188,7 @@ export default function Sidebar() {
         >
           <LogOut className="h-4 w-4 flex-shrink-0" />
           <AnimatePresence>
-            {sidebarOpen && (
+            {(mobile || sidebarOpen) && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 Sign Out
               </motion.span>
@@ -197,7 +202,7 @@ export default function Sidebar() {
             {getInitials(`${user?.firstName} ${user?.lastName}`)}
           </div>
           <AnimatePresence>
-            {sidebarOpen && (
+            {(mobile || sidebarOpen) && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -219,6 +224,7 @@ export default function Sidebar() {
       {/* Toggle button — sibling of the aside so it isn't clipped by overflow-hidden.
           Centered on the right border (-translate-x-1/2) and vertically centered
           within the logo header so it never overlaps the company-brand row. */}
+      {!mobile && (
       <button
         onClick={toggleSidebar}
         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -230,6 +236,7 @@ export default function Sidebar() {
           <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
         )}
       </button>
+      )}
     </div>
   );
 }
