@@ -5,6 +5,7 @@ const ApiResponse = require('../../utils/apiResponse');
 const asyncHandler = require('../../utils/asyncHandler');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
+const mdacService = require('../mdac/mdac.service');
 
 router.use(authenticate, tenantContext);
 
@@ -22,6 +23,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     paymentStats,
     agentPerformance,
     monthlyApplications,
+    mdacActionRequired,
   ] = await Promise.all([
     prisma.student.count({ where: { ...t, deletedAt: null } }),
     prisma.application.count({ where: { ...t, deletedAt: null } }),
@@ -76,6 +78,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
           GROUP BY DATE_TRUNC('month', "createdAt")
           ORDER BY DATE_TRUNC('month', "createdAt")
         `,
+    mdacService.dashboardCounts(tenantId, req.user),
   ]);
 
   const statusMap = applicationsByStatus.reduce((acc, item) => {
@@ -98,6 +101,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     recentApplications,
     agentPerformance,
     monthlyApplications,
+    mdacActionRequired,
   });
 }));
 

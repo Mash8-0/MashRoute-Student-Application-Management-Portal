@@ -22,6 +22,7 @@ export default function Applications() {
   const [searchParams] = useSearchParams();
   // Allow deep-linking a status filter from the dashboard (e.g. /applications?status=COMPLETED)
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [mdacFilter, setMdacFilter] = useState(searchParams.get('mdac') || 'all');
   const [liveUpdate, setLiveUpdate] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -31,8 +32,16 @@ export default function Applications() {
   const fetchApplications = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = { page, limit: 15, search: search || undefined, status: statusFilter !== 'all' ? statusFilter : undefined };
-      const res = await applicationAPI.list(params);
+      const params = {
+        page,
+        limit: 15,
+        search: search || undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        mdac: mdacFilter !== 'all' ? mdacFilter : undefined,
+      };
+      const res = mdacFilter !== 'all'
+        ? await applicationAPI.listMdac(params)
+        : await applicationAPI.list(params);
       setApplications(res.data.data || []);
       setPagination(res.data.pagination);
     } catch {
@@ -40,10 +49,10 @@ export default function Applications() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter, mdacFilter]);
 
   useEffect(() => { fetchApplications(); }, [fetchApplications]);
-  useEffect(() => { setPage(1); }, [search, statusFilter]);
+  useEffect(() => { setPage(1); }, [search, statusFilter, mdacFilter]);
 
   // Live socket events — refresh list silently when status changes or new app arrives
   useEffect(() => {
@@ -109,6 +118,16 @@ export default function Applications() {
           )}
         </div>
       ),
+    },
+    {
+      key: 'mdac',
+      label: 'MDAC',
+      render: (val) => {
+        const label = val?.eligibility?.displayState || val?.status;
+        return label
+          ? <span className="text-xs font-semibold">{label.replace(/_/g, ' ')}</span>
+          : <span className="text-xs text-muted-foreground">—</span>;
+      },
     },
     {
       key: 'priority',
@@ -186,6 +205,24 @@ export default function Applications() {
             {APPLICATION_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={mdacFilter} onValueChange={setMdacFilter}>
+          <SelectTrigger className="w-52 h-9">
+            <SelectValue placeholder="MDAC status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All MDAC records</SelectItem>
+            <SelectItem value="not_yet_eligible">Not yet eligible</SelectItem>
+            <SelectItem value="eligible_now">Eligible now</SelectItem>
+            <SelectItem value="due_tomorrow">Due tomorrow</SelectItem>
+            <SelectItem value="due_today">Due today</SelectItem>
+            <SelectItem value="submitted">Submitted</SelectItem>
+            <SelectItem value="submitted_unverified">Submitted unverified</SelectItem>
+            <SelectItem value="verified">Verified</SelectItem>
+            <SelectItem value="needs_review">Needs review</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+            <SelectItem value="not_required">Not required</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" onClick={() => fetchApplications()} className="h-9">

@@ -72,6 +72,15 @@ enum DocumentType {
   TUITION_PROOF
   INVOICE
   TUITION_INVOICE
+  MDAC_CONFIRMATION
+}
+
+enum MdacStatus {
+  NOT_REQUIRED
+  REQUIRED
+  SUBMITTED
+  VERIFIED
+  NEEDS_REVIEW
 }
 
 enum DocumentStatus {
@@ -222,6 +231,7 @@ model User {
   notes                 ApplicationNote[]
   generatedLOEs         LOE[]             @relation("LOEGeneratedBy")
   uploadedDocuments     Document[]        @relation("DocumentUploader")
+  verifiedMdacs         Application[]     @relation("MdacVerifiedBy")
 
   @@index([tenantId])
   @@index([email])
@@ -434,8 +444,28 @@ model Application {
   // Arrival
   arrivalDate                DateTime?
   flightDate                 DateTime?
+  arrivalTimezone            String?            @default("Asia/Kuala_Lumpur")
   arrivalStatus              String?
   flightTicketUrl            String?
+  flightNumber               String?
+  airline                    String?
+  lastPortOfEmbarkation      String?
+  modeOfTravel               String?
+  malaysiaAccommodationName  String?
+  malaysiaAccommodationType  String?
+  malaysiaAccommodationAddress String?
+  malaysiaAccommodationState String?
+  malaysiaAccommodationCity  String?
+  malaysiaAccommodationPostcode String?
+  mdacRequired               Boolean            @default(true)
+  mdacStatus                 MdacStatus         @default(REQUIRED)
+  mdacSubmittedAt            DateTime?
+  mdacProofUrl               String?
+  mdacProofDocumentId        String?
+  mdacVerifiedAt             DateTime?
+  mdacVerifiedById           String?
+  mdacReviewNotes            String?
+  mdacPreviousArrivalDate    DateTime?
   // Tuition Proof / Verification / Invoice
   tuitionProofUrl            String?
   tuitionProofUploadedById   String?
@@ -469,6 +499,7 @@ model Application {
   evisaUploadedBy        User?             @relation("EvisaUploadedBy", fields: [evisaUploadedById], references: [id])
   tuitionProofUploadedBy User?             @relation("TuitionProofUploadedBy", fields: [tuitionProofUploadedById], references: [id])
   tuitionVerifiedBy      User?             @relation("TuitionVerifiedBy", fields: [tuitionVerifiedById], references: [id])
+  mdacVerifiedBy         User?             @relation("MdacVerifiedBy", fields: [mdacVerifiedById], references: [id])
   documents              Document[]
   payments               Payment[]
   statusHistory          StatusHistory[]
@@ -481,6 +512,11 @@ model Application {
   @@index([agentId])
   @@index([status])
   @@index([referenceNo])
+  @@index([tenantId, arrivalDate])
+  @@index([tenantId, mdacStatus])
+  @@index([tenantId, mdacRequired])
+  @@index([tenantId, mdacStatus, arrivalDate])
+  @@index([mdacVerifiedById])
 }
 
 // ─── Documents ────────────────────────────────────────────────────────────────

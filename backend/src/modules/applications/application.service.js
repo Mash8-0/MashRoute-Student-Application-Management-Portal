@@ -4,6 +4,7 @@ const prisma = require('../../config/database');
 const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 const { generateReferenceNo } = require('../../utils/generateReference');
 const whatsapp = require('../../services/whatsappNotify');
+const { serializeMdac } = require('../mdac/mdac.service');
 
 // Pre-EMGS progress milestones
 const STATUS_PROGRESS = {
@@ -120,6 +121,7 @@ class ApplicationService {
       where, include: this._detailInclude(),
     });
     if (!application) throw { statusCode: 404, message: 'Application not found' };
+    application.mdac = serializeMdac(application);
     return application;
   }
 
@@ -838,6 +840,7 @@ class ApplicationService {
       evisaUploadedBy: { select: { firstName: true, lastName: true } },
       tuitionProofUploadedBy: { select: { firstName: true, lastName: true } },
       tuitionVerifiedBy: { select: { firstName: true, lastName: true } },
+      mdacVerifiedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       documents: {
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },

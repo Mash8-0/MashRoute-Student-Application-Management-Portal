@@ -60,6 +60,7 @@ export const studentAPI = {
 // ─── Applications ─────────────────────────────────────────────────────────────
 export const applicationAPI = {
   list: (params) => api.get('/applications', { params }),
+  listMdac: (params) => api.get('/applications/mdac/records', { params }),
   create: (data) => api.post('/applications', data),
   get: (id) => api.get(`/applications/${id}`),
   update: (id, data) => api.patch(`/applications/${id}`, data),
@@ -89,6 +90,13 @@ export const applicationAPI = {
   updateArrival: (id, formData) => api.patch(`/applications/${id}/arrival`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  getMdac: (id) => api.get(`/applications/${id}/mdac`),
+  markMdacNotRequired: (id, notes) => api.patch(`/applications/${id}/mdac/not-required`, { notes }),
+  markMdacSubmitted: (id, notes) => api.post(`/applications/${id}/mdac/submitted`, { notes }),
+  uploadMdacProof: (id, formData) => api.post(`/applications/${id}/mdac/proof`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  verifyMdac: (id, data) => api.post(`/applications/${id}/mdac/verify`, data),
   uploadTuitionProof: (id, formData) => api.post(`/applications/${id}/tuition-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),

@@ -43,6 +43,10 @@ const upload = multer({
 
 router.get('/', controller.listApplications);
 router.post('/', logActivity('CREATE', 'Application'), controller.createApplication);
+
+// MDAC arrival/reminder management list must be registered before /:id.
+router.get('/mdac/records', controller.listMdacRecords);
+
 router.get('/:id', controller.getApplication);
 
 // Edit: TENANT_ADMIN + SUPER_ADMIN (STAFF edits own via the same route — restricted in service via agentId)
@@ -88,6 +92,13 @@ router.post('/:id/eval-approval', upload.single('file'), logActivity('UPLOAD_EVA
 
 // Arrival: all authenticated users (flight ticket upload + arrival date)
 router.patch('/:id/arrival', upload.single('file'), logActivity('UPDATE', 'Application'), controller.updateArrival);
+
+// MDAC tracking actions.
+router.get('/:id/mdac', controller.getMdacEligibility);
+router.patch('/:id/mdac/not-required', logActivity('MDAC_NOT_REQUIRED', 'Application'), controller.markMdacNotRequired);
+router.post('/:id/mdac/submitted', logActivity('MDAC_SUBMITTED', 'Application'), controller.markMdacSubmitted);
+router.post('/:id/mdac/proof', upload.single('file'), logActivity('MDAC_PROOF_UPLOADED', 'Application'), controller.uploadMdacProof);
+router.post('/:id/mdac/verify', logActivity('MDAC_VERIFIED', 'Application'), controller.verifyMdac);
 
 // Tuition payment proof: all authenticated users
 router.post('/:id/tuition-proof', upload.single('file'), logActivity('UPLOAD_TUITION_PROOF', 'Application'), controller.uploadTuitionProof);

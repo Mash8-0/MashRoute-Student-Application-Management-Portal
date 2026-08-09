@@ -19,6 +19,7 @@ for (const dir of ['logs', 'uploads/temp', 'uploads/documents', 'uploads/loe']) 
 const logger = require('./config/logger');
 const errorMiddleware = require('./middleware/error.middleware');
 const routes = require('./routes');
+const { startMdacScheduler } = require('./modules/mdac/mdac.scheduler');
 
 const app = express();
 const httpServer = createServer(app);
@@ -140,6 +141,7 @@ httpServer.listen(PORT, () => {
   logger.info(`📡 API: http://localhost:${PORT}/api/${API_VERSION}`);
   logger.info(`🔌 Socket.io: enabled`);
   logger.info(`🗄️  Database: Neon PostgreSQL`);
+  startMdacScheduler();
 });
 
 process.on('SIGTERM', () => {

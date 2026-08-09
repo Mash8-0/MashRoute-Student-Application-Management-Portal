@@ -1453,7 +1453,7 @@ export default function ApplicationDetail() {
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
               >
                 <SectionCard title="Arrival" icon={PlaneLanding}>
-                  <ArrivalCard application={app} canEdit={canUpload} onRefresh={fetchApplication} />
+                  <ArrivalCard application={app} canEdit={canUpload} userRole={user?.role} onRefresh={fetchApplication} />
                 </SectionCard>
               </motion.div>
             )}

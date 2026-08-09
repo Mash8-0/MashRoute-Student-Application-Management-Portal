@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap, FileText, CreditCard, CheckCircle2,
   XCircle, Clock, RefreshCw, Plus, UserPlus, ChevronRight,
+  PlaneLanding, AlertTriangle,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -60,6 +61,7 @@ export default function Dashboard() {
   }));
 
   const goStatus = (status) => navigate(`/applications?status=${status}`);
+  const goMdac = (mdac) => navigate(`/applications?mdac=${mdac}`);
 
   // Greet the company by name for the tenant admin; agents/staff by their full name.
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
@@ -162,6 +164,40 @@ export default function Dashboard() {
           onClick={() => goStatus('REJECTED')}
         />
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <PlaneLanding className="h-4 w-4 text-primary" />
+            MDAC Action Required
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ['Eligible now', data?.mdacActionRequired?.eligibleNow || 0, 'eligible_now'],
+              ['Due tomorrow', data?.mdacActionRequired?.dueTomorrow || 0, 'due_tomorrow'],
+              ['Due today', data?.mdacActionRequired?.dueToday || 0, 'due_today'],
+              ['Unverified', data?.mdacActionRequired?.submittedUnverified || 0, 'submitted_unverified'],
+              ['Needs review', data?.mdacActionRequired?.needsReview || 0, 'needs_review'],
+              ['Overdue', data?.mdacActionRequired?.overdue || 0, 'overdue'],
+            ].map(([label, value, filter]) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => goMdac(filter)}
+                className="rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-accent"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                  {(filter === 'due_today' || filter === 'overdue') && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
+                </div>
+                <p className="mt-1 text-2xl font-bold text-foreground">{loading ? '—' : value}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
