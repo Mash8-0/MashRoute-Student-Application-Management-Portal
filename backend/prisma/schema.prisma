@@ -505,6 +505,7 @@ model Application {
   statusHistory          StatusHistory[]
   notes                  ApplicationNote[]
   notifications          Notification[]
+  emailLogs              EmailLog[]
   loe                    LOE?
 
   @@index([tenantId])
@@ -756,4 +757,51 @@ model WhatsAppLog {
   @@index([tenantId])
   @@index([applicationId])
   @@index([messageStatus])
+}
+
+model EmailLog {
+  id                    String      @id
+  applicationId         String
+  tenantId              String
+  sentByUserId          String?
+  sentByName            String?
+  emailType             String
+  subject               String
+  body                  String
+  toEmailHidden         String?
+  toUniversityId        String?
+  attachmentNames       Json?
+  status                String      @default("SENT")
+  errorMessage          String?
+  providerResponse      Json?
+  sentAt                DateTime?
+  createdAt             DateTime    @default(now())
+  attachmentDocumentIds Json?
+  notificationType      String?
+  recipientEmail        String?
+  recipientType         String?
+  safeErrorMessage      String?
+  fallbackUsed          Boolean?    @default(false)
+  fromEmail             String?
+  replyToEmail          String?
+  senderSource          String?
+  offerLetterDocumentId String?
+  recipientRecordId     String?
+  idempotencyKey        String?
+  provider              String?     @default("RESEND")
+  providerMessageId     String?
+  attemptCount          Int         @default(0)
+  failureCode           String?
+  initiatedByUserId     String?
+  application           Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([emailType])
+  @@index([notificationType])
+  @@index([recipientType])
+  @@index([status])
+  @@index([tenantId])
+  @@index([offerLetterDocumentId])
+  @@index([idempotencyKey])
+  @@unique([idempotencyKey, recipientType, recipientRecordId], name: "email_log_offer_letter_recipient_unique")
 }

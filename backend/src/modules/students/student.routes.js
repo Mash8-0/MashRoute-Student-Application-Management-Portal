@@ -5,7 +5,7 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
 const { logActivity } = require('../../middleware/activityLog.middleware');
 
-router.use(authenticate, tenantContext);
+router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 router.get('/', controller.listStudents);
 router.post('/', authorize('TENANT_ADMIN', 'STAFF', 'SUPER_ADMIN'), logActivity('CREATE', 'Student'), controller.createStudent);

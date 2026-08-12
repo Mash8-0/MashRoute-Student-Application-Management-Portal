@@ -3,11 +3,12 @@ const multer = require('multer');
 const path = require('path');
 const router = express.Router();
 const controller = require('./application.controller');
+const offerLetterEmailController = require('./offerLetterEmail.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
 const { logActivity } = require('../../middleware/activityLog.middleware');
 
-router.use(authenticate, tenantContext);
+router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 // ─── Multer (for offer letter + payment proof uploads) ────────────────────────
 
@@ -65,6 +66,7 @@ router.patch('/:id/status', logActivity('STATUS_UPDATE', 'Application'), control
 
 // Offer Letter upload: TENANT_ADMIN only (enforced in service)
 router.post('/:id/offer-letter', upload.single('file'), logActivity('UPLOAD_OFFER_LETTER', 'Application'), controller.uploadOfferLetter);
+router.post('/:id/offer-letter-email/retry', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('RETRY_OFFER_LETTER_EMAIL', 'Application'), offerLetterEmailController.retryOfferLetterIssuedEmail);
 
 // Payment proof: all authenticated users (enforced in service for pre-conditions)
 router.post('/:id/payment-proof', upload.single('file'), logActivity('UPLOAD_PAYMENT_PROOF', 'Application'), controller.uploadPaymentProof);

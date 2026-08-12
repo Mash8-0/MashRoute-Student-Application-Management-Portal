@@ -261,12 +261,23 @@ class ApplicationService {
       throw { statusCode: 400, message: 'Offer Letter can only be uploaded when status is "Offer Letter Issued"' };
     }
 
+    if (file.mimetype !== 'application/pdf' || path.extname(file.originalname || '').toLowerCase() !== '.pdf') {
+      throw { statusCode: 400, message: 'The official Offer Letter must be uploaded as a PDF' };
+    }
+
+    // Read the upload before Drive removes the temporary file. The email is
+    // triggered only after the upload and database update both succeed.
+    const offerLetterBuffer = await fs.readFile(file.path);
+    if (offerLetterBuffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw { statusCode: 400, message: 'The uploaded file content is not a valid PDF Offer Letter' };
+    }
+
     // Drive: LOE {Passport} {Name} {University ID} {Date}
     const ctx = await this._namingContext(application);
     const { fileUrl, publicId } = await this._uploadNamed(file, `LOE ${ctx.passport} ${ctx.name} ${ctx.univId} ${ctx.date}`, application, ctx);
 
     // Create Document record so it appears in the Documents section
-    await prisma.document.create({
+    const offerLetterDocument = await prisma.document.create({
       data: {
         tenantId, studentId: application.studentId, applicationId: id,
         uploadedById: userId, type: 'OFFER_LETTER', status: 'UPLOADED',
@@ -286,7 +297,34 @@ class ApplicationService {
       include: this._detailInclude(),
     });
     whatsapp.notify('offer_letter_uploaded', updated);
+    await require('../../services/offerLetterIssuedNotification').sendOfferLetterIssued({
+      applicationId: id,
+      tenantId,
+      documentId: offerLetterDocument.id,
+      initiatedByUserId: userId,
+      file: { buffer: offerLetterBuffer, mimetype: file.mimetype, originalname: file.originalname },
+    });
     return updated;
+  }
+
+  async retryOfferLetterIssuedEmail(id, tenantId, userId, userRole) {
+    if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
+      throw { statusCode: 403, message: 'Only Tenant Admin can retry the Offer Letter Issued email' };
+    }
+    const application = await this._assertExists(id, tenantId);
+    if (application.status !== 'OFFER_LETTER_ISSUED' || !application.offerLetterUrl) {
+      throw { statusCode: 400, message: 'A successfully uploaded Offer Letter is required before retrying the email' };
+    }
+    const document = await prisma.document.findFirst({
+      where: { tenantId, applicationId: id, studentId: application.studentId, type: 'OFFER_LETTER', status: 'UPLOADED', isActive: true, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!document) throw { statusCode: 404, message: 'The official Offer Letter document could not be found' };
+    const buffer = await this._readStoredOfferLetter(document);
+    return require('../../services/offerLetterIssuedNotification').sendOfferLetterIssued({
+      applicationId: id, tenantId, documentId: document.id, initiatedByUserId: userId,
+      file: { buffer, mimetype: document.mimeType, originalname: document.originalName },
+    });
   }
 
   // ─── Upload Payment Proof (all authenticated users) ────────────────────────
@@ -806,6 +844,30 @@ class ApplicationService {
         .catch(() => {});
     }
     return { fileUrl: res.fileUrl, publicId: res.driveFileId || null };
+  }
+
+  async _readStoredOfferLetter(document) {
+    if (document.mimeType !== 'application/pdf') throw { statusCode: 400, message: 'The stored Offer Letter is not a PDF' };
+    const maxBytes = Number(process.env.OFFER_LETTER_EMAIL_MAX_BYTES) || 10 * 1024 * 1024;
+    const parsed = new URL(document.fileUrl);
+    let buffer;
+    if (parsed.pathname.startsWith('/uploads/')) {
+      const uploadsRoot = path.resolve(__dirname, '../../../uploads');
+      const localPath = path.resolve(uploadsRoot, parsed.pathname.replace(/^\/uploads\//, ''));
+      if (!localPath.startsWith(`${uploadsRoot}${path.sep}`)) throw { statusCode: 400, message: 'Invalid Offer Letter storage path' };
+      buffer = await fs.readFile(localPath).catch(() => null);
+    } else {
+      const allowedHosts = new Set(['drive.google.com', 'www.googleapis.com', 'lh3.googleusercontent.com', 'mashroute.com', 'www.mashroute.com', ...(process.env.OFFER_LETTER_STORAGE_HOSTS || '').split(',').map((host) => host.trim()).filter(Boolean)]);
+      if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) throw { statusCode: 400, message: 'Offer Letter storage host is not approved for email delivery' };
+      const response = await fetch(document.fileUrl, { signal: AbortSignal.timeout(15000) }).catch(() => null);
+      if (!response?.ok) throw { statusCode: 502, message: 'The Offer Letter file could not be retrieved. Please verify storage and retry.' };
+      const contentLength = Number(response.headers.get('content-length'));
+      if (contentLength > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the email attachment size limit' };
+      buffer = Buffer.from(await response.arrayBuffer());
+    }
+    if (!buffer?.length) throw { statusCode: 404, message: 'The Offer Letter file is missing from storage' };
+    if (buffer.length > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the email attachment size limit' };
+    return buffer;
   }
 
   async _assertExists(id, tenantId) {

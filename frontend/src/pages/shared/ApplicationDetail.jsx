@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit, Send, Loader2, Wifi, CheckCircle2, Clock,
   Upload, FileText, CreditCard, ShieldCheck, Receipt, ChevronDown,
-  Download, Eye, Trash2, AlertCircle, TrendingUp, X, PlaneLanding, XCircle, Wallet,
+  Download, Eye, Trash2, AlertCircle, TrendingUp, X, PlaneLanding, XCircle, Wallet, Mail,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { applicationAPI, documentAPI, loeAPI } from '../../api/endpoints';
@@ -106,7 +106,10 @@ function IWantToMenu({ app, user, onAction }) {
   } else if (app.status === 'OFFER_LETTER_ISSUED') {
     if (isAdmin) {
       if (!app.offerLetterUrl) actions.push({ id: 'upload-ol', label: 'Upload Offer Letter', icon: Upload, variant: 'primary' });
-      else actions.push({ id: 'view-ol', label: 'View Offer Letter', icon: Eye });
+      else {
+        actions.push({ id: 'view-ol', label: 'View Offer Letter', icon: Eye });
+        actions.push({ id: 'retry-ol-email', label: 'Retry Offer Letter Issued Email', icon: Mail });
+      }
       actions.push({ id: 'update-status', label: 'Update Status', icon: CheckCircle2 });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
       actions.push({ id: 'delete', label: 'Delete Application', icon: Trash2, variant: 'danger' });
@@ -499,6 +502,7 @@ export default function ApplicationDetail() {
       case 'view-ol':
         if (application.offerLetterUrl) setPreviewFile({ url: application.offerLetterUrl, label: 'Offer Letter' });
         break;
+      case 'retry-ol-email': handleRetryOfferLetterEmail(); break;
       case 'upload-proof': setShowUploadProof(true); break;
       case 'view-proof':
         if (application.paymentProofUrl) setPreviewFile({ url: application.paymentProofUrl, label: 'Payment Proof' });
@@ -585,6 +589,19 @@ export default function ApplicationDetail() {
       toast.success('Offer Letter uploaded');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRetryOfferLetterEmail = async () => {
+    setProcessing(true);
+    try {
+      const res = await applicationAPI.retryOfferLetterIssuedEmail(id);
+      const sent = (res.data.data?.results || []).filter((result) => result.status === 'SENT').length;
+      toast.success(sent ? `Offer Letter Issued email sent to ${sent} recipient${sent === 1 ? '' : 's'}` : 'Offer Letter Issued email was already sent');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Offer Letter Issued email retry failed');
     } finally {
       setProcessing(false);
     }

@@ -70,6 +70,7 @@ export const applicationAPI = {
   uploadOfferLetter: (id, formData) => api.post(`/applications/${id}/offer-letter`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  retryOfferLetterIssuedEmail: (id) => api.post(`/applications/${id}/offer-letter-email/retry`),
   uploadPaymentProof: (id, formData) => api.post(`/applications/${id}/payment-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
