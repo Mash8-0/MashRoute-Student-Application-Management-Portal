@@ -327,7 +327,12 @@ async function summary(applicationId, tenantId, includeProtected = false) {
     return safe;
   };
   return {
-    application: { id: app.id, referenceNo: app.referenceNo, status: app.status, offerLetterUrl: app.offerLetterUrl, emgsPaymentStatus: app.emgsPaymentStatus, university: app.university, program: app.program },
+    application: {
+      id: app.id, referenceNo: app.referenceNo, status: app.status,
+      offerLetterUrl: app.offerLetterUrl, emgsPaymentStatus: app.emgsPaymentStatus,
+      paymentVerifiedAt: app.paymentVerifiedAt, invoiceIssuedAt: app.invoiceIssuedAt,
+      university: app.university, program: app.program,
+    },
     ledger, totals, fees: fees.map((f) => ({ ...f, destinationSnapshot: sanitizeSnapshot(f.destinationSnapshot) })),
     transactions: transactions.map((t) => ({ ...t, destinationSnapshot: sanitizeSnapshot(t.destinationSnapshot) })), receipts, reversals, tasks, auditHistory,
   };
@@ -412,7 +417,13 @@ async function verify(id, tenantId, actorId, data = {}) {
     const payable = state.payableByCurrency.get(row.currency) || 0n; const paid = state.paidByCurrency.get(row.currency) || 0n;
     const receiptNo = `EMGS-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`;
     const receipt = await tx.emgsPaymentReceipt.create({ data: { tenantId, studentId: row.studentId, applicationId: row.applicationId, transactionId: id, receiptNo, amount: verifiedAmount, currency: row.currency, destinationType: row.destinationType, destinationSnapshot: row.destinationSnapshot, remainingBalance: decimalFromCents(payable - paid > 0n ? payable - paid : 0n), verifiedByUserId: actorId, verifiedAt: new Date() } });
-    if (['FULLY_PAID', 'OVERPAID'].includes(state.status)) await tx.paymentWorkflowTask.upsert({ where: { id: `prepare-emgs-${row.applicationId}` }, create: { id: `prepare-emgs-${row.applicationId}`, tenantId, applicationId: row.applicationId, taskType: 'PREPARE_EMGS_APPLICATION', title: 'Prepare/Submit EMGS Application', createdById: actorId }, update: { status: 'PENDING', completedAt: null, completedById: null } });
+    if (['FULLY_PAID', 'OVERPAID'].includes(state.status)) {
+      await tx.application.update({
+        where: { id: row.applicationId },
+        data: { paymentVerifiedById: actorId, paymentVerifiedAt: new Date() },
+      });
+      await tx.paymentWorkflowTask.upsert({ where: { id: `prepare-emgs-${row.applicationId}` }, create: { id: `prepare-emgs-${row.applicationId}`, tenantId, applicationId: row.applicationId, taskType: 'PREPARE_EMGS_APPLICATION', title: 'Prepare/Submit EMGS Application', createdById: actorId }, update: { status: 'PENDING', completedAt: null, completedById: null } });
+    }
     await audit(tx, { tenantId, actorId, entityType: 'EMGS_TRANSACTION', entityId: id, action: 'PAYMENT_VERIFIED', newValue: { verifiedAmount, currency: row.currency, receiptNo, ledgerStatus: state.status } });
     return receipt;
   }, { isolationLevel: 'Serializable' });

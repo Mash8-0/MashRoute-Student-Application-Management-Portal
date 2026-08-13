@@ -634,6 +634,14 @@ class ApplicationService {
       include: this._detailInclude(),
     });
 
+    // The EMGS payment ledger creates its invoice as a draft during payment
+    // setup. Issuing it here publishes that same invoice instead of leaving the
+    // financial record in DRAFT while the application enters EMGS processing.
+    await prisma.invoice.updateMany({
+      where: { tenantId, applicationId: id, invoiceType: 'EMGS', status: 'DRAFT' },
+      data: { status: 'ISSUED', issuedAt: new Date(), issuedById: userId },
+    });
+
     await this._recordStatusHistory(id, userId, oldStatus, 'EMGS_PROCESSING',
       notes || 'Invoice issued — EMGS workflow started', 0);
 
