@@ -20,7 +20,7 @@ test('status email uses the responsive MashRoute design with dynamic details and
   assert.match(html, /APPLICATION DETAILS/);
   assert.match(html, /AWAITING OFFER LETTER/);
   assert.match(html, /email-assets\/status-wifi\.png/);
-  assert.doesNotMatch(html, />LIVE</);
+  assert.match(html, />LIVE</);
   assert.match(html, /Ahmad Rahman/);
   assert.match(html, /A12345678/);
   assert.match(html, /next stage\.<br>You can review/);
