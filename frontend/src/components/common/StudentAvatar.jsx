@@ -23,7 +23,7 @@ export default function StudentAvatar({ student, documents = [], size = 'md', cl
   const sizeClasses = sizeMap[size] || sizeMap.md;
 
   const photoDoc = documents.find((d) => d.type === 'PHOTO' && !d.deletedAt);
-  const rawUrl = photoDoc?.driveViewLink || photoDoc?.fileUrl;
+  const rawUrl = photoDoc?.driveViewLink || photoDoc?.fileUrl || student?.photo;
   const photoUrl = rawUrl ? getDriveImageUrl(rawUrl) : null;
 
   const initial = (student?.fullName || '?').trim().charAt(0).toUpperCase();

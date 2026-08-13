@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/input';
 import { useAuthStore } from '../../store/authStore';
 import { formatDate } from '../../lib/utils';
 import { toast } from '../../components/ui/toast';
+import StudentAvatar from '../../components/common/StudentAvatar';
 
 export default function Students() {
   const [students, setStudents] = useState([]);
@@ -43,9 +44,7 @@ export default function Students() {
       label: 'Student',
       render: (val, row) => (
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-            {val?.charAt(0)?.toUpperCase()}
-          </div>
+          <StudentAvatar student={row} documents={row.documents || []} size="sm" className="h-8 w-8" />
           <div>
             <p className="text-sm font-medium">{val}</p>
             <p className="text-xs text-muted-foreground">{row.email || row.phone || '—'}</p>
@@ -82,7 +81,17 @@ export default function Students() {
     {
       key: 'createdAt',
       label: 'Added',
-      render: (val) => <span className="text-xs text-muted-foreground">{formatDate(val)}</span>,
+      render: (val) => (
+        <div className="whitespace-nowrap text-xs text-muted-foreground">
+          <p>{formatDate(val)}</p>
+          <p className="mt-0.5 text-[11px]">{formatDate(val, 'h:mm a')}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'assignedStaff', label: 'Assigned Staff', render: (val) => val
+        ? <span className="whitespace-nowrap font-medium">{val.firstName} {val.lastName}</span>
+        : <span className="whitespace-nowrap text-xs text-muted-foreground">Not assigned</span>,
     },
     {
       key: 'id',
@@ -119,7 +128,6 @@ export default function Students() {
           className="pl-9 h-9"
         />
       </div>
-
       <DataTable
         columns={columns}
         data={students}
