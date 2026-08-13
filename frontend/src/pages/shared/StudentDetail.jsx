@@ -465,7 +465,7 @@ export default function StudentDetail() {
               <CardContent className="py-12 text-center text-sm text-muted-foreground">No applications yet.</CardContent>
             </Card>
           ) : (
-            applications.map((app) => <EmgsPaymentCard key={app.id} application={app} canVerify={canVerifyPayment} onOpenApplication={() => navigate(`/applications/${app.id}`)} />)
+            applications.map((app) => <EmgsPaymentCard key={app.id} application={app} canVerify={canVerifyPayment} onChanged={fetchAll} />)
             /* Legacy payment card retained below only for source history.
             applications.map((app) => {
               const paymentDone = !!app.paymentProofUrl;

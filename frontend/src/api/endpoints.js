@@ -142,6 +142,7 @@ export const emgsPaymentAPI = {
   archiveAccount: (id) => api.delete(`/emgs-payments/accounts/${id}`),
   getApplicationPayment: (applicationId) => api.get(`/emgs-payments/applications/${applicationId}`),
   setup: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/setup`, data),
+  amendFee: (feeId, data) => api.patch(`/emgs-payments/fees/${feeId}`, data),
   postpone: (applicationId) => api.post(`/emgs-payments/applications/${applicationId}/postpone`),
   notRequired: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/not-required`, data),
   submitProof: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/proofs`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),

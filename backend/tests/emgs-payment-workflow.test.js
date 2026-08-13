@@ -64,12 +64,14 @@ test('finance routes expose account lifecycle and proof review without registere
   assert.doesNotMatch(source, /REGISTERED_AGENT/);
 });
 
-test('payment UI uses the EMGS ledger API rather than legacy application timestamps', () => {
+test('student payment UI manages the EMGS ledger without leaving the student', () => {
   const card = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/payments/EmgsPaymentCard.jsx'), 'utf8');
   assert.match(card, /getApplicationPayment/);
   assert.match(card, /submitProof/);
   assert.match(card, /Pending Verification/);
-  assert.match(card, /View Details/);
+  assert.match(card, /Open Payment/);
+  assert.match(card, /Edit \/ Amend/);
+  assert.match(card, /amendFee/);
 });
 
 test('schema and migration enforce application ledger and idempotent active EMGS fee', () => {

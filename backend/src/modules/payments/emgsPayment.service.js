@@ -275,6 +275,25 @@ async function setup(applicationId, tenantId, actorId, data) {
   }, { isolationLevel: 'Serializable' });
 }
 
+async function amendFee(id, tenantId, actorId, data) {
+  const current = await prisma.emgsFeeItem.findFirst({ where: { id, tenantId, status: { notIn: ['CANCELLED', 'NOT_REQUIRED'] } } });
+  if (!current) throw { statusCode: 404, message: 'Active EMGS fee not found' };
+  const amount = data.amount == null ? String(current.amount) : money(data.amount);
+  const dueDate = data.dueDate == null ? current.dueDate : new Date(data.dueDate);
+  if (Number.isNaN(dueDate.getTime())) throw { statusCode: 400, message: 'A valid due date is required' };
+  const verified = await prisma.emgsPaymentTransaction.findMany({ where: { tenantId, feeItemId: id, status: 'VERIFIED' }, select: { amount: true } });
+  const verifiedTotal = verified.reduce((sum, row) => sum + cents(row.amount), 0n);
+  if (cents(amount) < verifiedTotal) throw { statusCode: 400, message: 'Fee amount cannot be lower than the verified paid amount' };
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.emgsFeeItem.update({ where: { id }, data: { amount, dueDate, description: data.description == null ? current.description : String(data.description), internalNote: data.internalNote == null ? current.internalNote : data.internalNote } });
+    if (current.legacyPaymentId) await tx.payment.update({ where: { id: current.legacyPaymentId }, data: { amount, dueDate, description: updated.description, notes: updated.internalNote } });
+    await audit(tx, { tenantId, actorId, entityType: 'EMGS_FEE', entityId: id, action: 'EMGS_FEE_AMENDED', oldValue: { amount: String(current.amount), dueDate: current.dueDate }, newValue: { amount, dueDate } });
+    await recalculate(tx, current.applicationId, tenantId);
+    return updated;
+  });
+}
+
 async function summary(applicationId, tenantId, includeProtected = false) {
   const app = await applicationForTenant(applicationId, tenantId);
   const [ledger, fees, transactions, receipts, reversals, tasks] = await Promise.all([
@@ -424,4 +443,4 @@ async function reverse(id, tenantId, actorId, data = {}) {
   }, { isolationLevel: 'Serializable' });
 }
 
-module.exports = { listAccounts, createAccount, updateAccount, archiveAccount, revealAccount, postpone, markNotRequired, setup, summary, submitProof, startReview, verify, reject, reverse, recalculate, money, cents, decimalFromCents, maskAccountNumber, protectAccountNumber, revealAccountNumber, publicAccount, snapshot };
+module.exports = { listAccounts, createAccount, updateAccount, archiveAccount, revealAccount, postpone, markNotRequired, setup, amendFee, summary, submitProof, startReview, verify, reject, reverse, recalculate, money, cents, decimalFromCents, maskAccountNumber, protectAccountNumber, revealAccountNumber, publicAccount, snapshot };
