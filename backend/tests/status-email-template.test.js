@@ -80,3 +80,14 @@ test('approval uploads send one eVisa email with all three approval documents', 
   assert.match(source, /attachments,/);
   assert.match(source, /EVISA_ATTACHMENTS_TOTAL_MAX_BYTES/);
 });
+
+test('admins can delete EMGS approval, eVAL approval, and eVisa workflow files', () => {
+  const backendSource = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
+  const frontendSource = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/StudentDetail.jsx'), 'utf8');
+  for (const kind of ['emgs-approval', 'eval-approval', 'evisa']) {
+    assert.match(backendSource, new RegExp(`['"]?${kind}['"]?: \\{`));
+    assert.match(frontendSource, new RegExp(`['"]${kind}['"]`));
+  }
+  assert.match(backendSource, /postEvalStatus: 'AWAITING_EVISA'/);
+  assert.match(backendSource, /_deleteStoredWorkflowFile\(fileUrl\)/);
+});

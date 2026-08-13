@@ -588,6 +588,27 @@ class ApplicationService {
           paymentVerifiedById: null, paymentVerifiedAt: null,
         },
       },
+      'emgs-approval': {
+        urlField: 'emgsApprovalUrl',
+        clear: {
+          emgsApprovalUrl: null, emgsApprovalUploadedById: null, emgsApprovalUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
+      'eval-approval': {
+        urlField: 'evalApprovalUrl',
+        clear: {
+          evalApprovalUrl: null, evalApprovalUploadedById: null, evalApprovalUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
+      evisa: {
+        urlField: 'evisaUrl',
+        clear: {
+          evisaUrl: null, evisaUploadedById: null, evisaUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
     };
     const definition = definitions[kind];
     if (!definition) throw { statusCode: 400, message: 'Unsupported workflow document type' };
@@ -596,14 +617,15 @@ class ApplicationService {
     const fileUrl = application[definition.urlField];
     if (!fileUrl) throw { statusCode: 404, message: 'Workflow document not found' };
 
-    const document = await prisma.document.findFirst({
+    const document = definition.documentType ? await prisma.document.findFirst({
       where: {
         tenantId, applicationId: id, studentId: application.studentId,
         type: definition.documentType, fileUrl, deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },
-    });
+    }) : null;
     if (document) await documentService.deleteDocument(document.id, tenantId);
+    if (!document) await this._deleteStoredWorkflowFile(fileUrl);
 
     return prisma.application.update({
       where: { id },
@@ -1167,6 +1189,22 @@ class ApplicationService {
         .catch(() => {});
     }
     return { fileUrl: res.fileUrl, publicId: res.driveFileId || null };
+  }
+
+  async _deleteStoredWorkflowFile(fileUrl) {
+    let parsed;
+    try { parsed = new URL(fileUrl); } catch { return; }
+    const driveId = parsed.searchParams.get('id') || parsed.pathname.match(/\/d\/([\w-]+)/)?.[1];
+    if (driveId) {
+      const { deleteFromDrive } = require('../../services/driveUpload');
+      await deleteFromDrive(driveId);
+      return;
+    }
+    if (parsed.pathname.startsWith('/uploads/')) {
+      const uploadsRoot = path.resolve(__dirname, '../../../uploads');
+      const localPath = path.resolve(uploadsRoot, parsed.pathname.replace(/^\/uploads\//, ''));
+      if (localPath.startsWith(`${uploadsRoot}${path.sep}`)) await fs.unlink(localPath).catch(() => {});
+    }
   }
 
   async _readStoredOfferLetter(document) {

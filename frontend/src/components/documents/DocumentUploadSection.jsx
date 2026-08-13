@@ -412,7 +412,7 @@ export default function DocumentUploadSection({
               />
             ))}
 
-            {/* Application workflow documents (offer letter, eVisa, approvals, …) — view/download only */}
+            {/* Application workflow documents (offer letter, eVisa, approvals, …). */}
             {extraDocs.map(d => (
               <div key={d.key} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center gap-3 min-w-0">

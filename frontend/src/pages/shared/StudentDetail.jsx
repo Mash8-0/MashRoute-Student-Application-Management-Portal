@@ -219,9 +219,9 @@ export default function StudentDetail() {
   const WF_DOC_DEFS = [
     ['offerLetterUrl', 'Offer Letter', 'offer-letter'],
     ['paymentProofUrl', 'EMGS Payment Proof', 'payment-proof'],
-    ['emgsApprovalUrl', 'EMGS Approval Letter'],
-    ['evalApprovalUrl', 'eVAL Approval Letter'],
-    ['evisaUrl', 'eVisa'],
+    ['emgsApprovalUrl', 'EMGS Approval Letter', 'emgs-approval'],
+    ['evalApprovalUrl', 'eVAL Approval Letter', 'eval-approval'],
+    ['evisaUrl', 'eVisa', 'evisa'],
     ['flightTicketUrl', 'Flight Ticket'],
     ['tuitionProofUrl', 'Tuition Payment Proof'],
   ];
