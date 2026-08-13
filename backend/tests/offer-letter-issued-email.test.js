@@ -156,6 +156,20 @@ test('delivery attaches the PDF, records provider ID, audits Agent sharing, and 
   assert.equal(sends.length, 1);
 });
 
+test('explicit Send Notification creates a new audited delivery attempt', async () => {
+  const application = applicationFixture({ notifications: { offerLetterIssued: { student: true, staff: false } } });
+  const db = mockDb(application);
+  const sends = [];
+  const input = { applicationId: 'app-1', tenantId: 'tenant-1', documentId: 'doc-1', initiatedByUserId: 'admin-1', file: { mimetype: 'application/pdf', buffer: Buffer.from('%PDF-1.4'), originalname: 'offer.pdf' }, forceResend: true };
+  const first = await sendOfferLetterIssued(input, { prisma: db, sendEmail: async () => { sends.push('first'); return { id: 'resend-manual-1' }; } });
+  const second = await sendOfferLetterIssued(input, { prisma: db, sendEmail: async () => { sends.push('second'); return { id: 'resend-manual-2' }; } });
+  assert.equal(first.results[0].status, 'SENT');
+  assert.equal(second.results[0].status, 'SENT');
+  assert.equal(sends.length, 2);
+  assert.equal(db.logs.length, 2);
+  assert.notEqual(first.idempotencyKey, second.idempotencyKey);
+});
+
 test('secure token validates exact document and rejects expired, revoked, modified, and cross-tenant access', async () => {
   const db = mockDb(applicationFixture());
   const created = await offerAccess.createAccess({ tenantId: 'tenant-1', applicationId: 'app-1', studentId: 'student-1', documentId: 'doc-1', recipientType: 'STUDENT', recipientRecordId: 'student-1', recipientEmail: 'student@example.com', allowDownload: true }, db);

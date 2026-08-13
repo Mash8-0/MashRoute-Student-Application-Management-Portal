@@ -119,7 +119,7 @@ async function prepareLog(db, data) {
   }
 }
 
-async function sendOfferLetterIssued({ applicationId, tenantId, documentId, initiatedByUserId, file }, deps = {}) {
+async function sendOfferLetterIssued({ applicationId, tenantId, documentId, initiatedByUserId, file, forceResend = false }, deps = {}) {
   const db = deps.prisma || prisma;
   const sendEmail = deps.sendEmail || sendNotificationEmail;
   const application = await loadContext(applicationId, tenantId, db);
@@ -142,7 +142,10 @@ async function sendOfferLetterIssued({ applicationId, tenantId, documentId, init
 
   const identifier = application.student.passportNumber || application.student.id;
   const attachmentFileName = offerLetterFilename({ studentName: application.student.fullName, passportNumber: identifier, studentId: application.student.id });
-  const idempotencyKey = `offer-letter-issued:${tenantId}:${application.studentId}:${document.id}`;
+  const baseIdempotencyKey = `offer-letter-issued:${tenantId}:${application.studentId}:${document.id}`;
+  // An explicit, permission-protected Send Notification click is a deliberate
+  // new delivery. Other callers retain deterministic duplicate protection.
+  const idempotencyKey = forceResend ? `${baseIdempotencyKey}:manual:${randomUUID()}` : baseIdempotencyKey;
   const senderName = userName(initiator) || application.tenant.name || 'MashRoute';
   const senderDesignation = initiator.role === 'TENANT_ADMIN' ? 'Tenant Administrator' : 'Administrator';
   const results = [];

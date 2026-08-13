@@ -4,7 +4,7 @@ const prisma = require('../../config/database');
 const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 const { generateReferenceNo } = require('../../utils/generateReference');
 const whatsapp = require('../../services/whatsappNotify');
-const { serializeMdac } = require('../mdac/mdac.service');
+const emailNotify = require('../../services/emailNotify');
 
 // Pre-EMGS progress milestones
 const STATUS_PROGRESS = {
@@ -38,20 +38,124 @@ const EMGS_STEPS = [0, 5, 10, 15, 32, 35, 70, 80, 90, 100];
 
 // Post-eVAL workflow states (separate from the EMGS percentage).
 const POST_EVAL_STATUSES = ['AWAITING_EVISA', 'EVISA_APPROVED', 'UNDER_ARRIVAL', 'ARRIVAL_COMPLETED'];
+const ENGLISH_PROFICIENCY_OPTIONS = ['IELTS', 'PTE', 'MOI', 'NONE'];
+const INTAKE_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+async function resolveApplicationIntake(tenantId, intakeId, { requireAvailable = false } = {}) {
+  if (!intakeId) return null;
+  const intake = await prisma.intake.findFirst({
+    where: {
+      id: intakeId,
+      tenantId,
+      ...(requireAvailable && {
+        isActive: true,
+        isAvailableForInternationalStudents: true,
+        status: { in: ['OPEN', 'CLOSING_SOON', 'UPCOMING'] },
+      }),
+    },
+  });
+  if (!intake) throw { statusCode: 400, message: 'Selected intake is not available' };
+  if (requireAvailable && intake.internationalApplicationDeadline && intake.internationalApplicationDeadline < new Date()) {
+    throw { statusCode: 400, message: 'Selected intake application deadline has passed' };
+  }
+  if (requireAvailable && intake.availableSeats === 0) {
+    throw { statusCode: 400, message: 'Selected intake has no available seats' };
+  }
+  return {
+    universityId: intake.universityId,
+    campusId: intake.campusId,
+    campusCode: intake.campusCode,
+    campus: intake.campusName || intake.campusCode,
+    programmeId: intake.programmeId,
+    program: intake.programmeName,
+    intakeId: intake.id,
+    intake: `${INTAKE_MONTHS[intake.intakeMonth - 1]} ${intake.intakeYear}`,
+    legacyIntake: `${INTAKE_MONTHS[intake.intakeMonth - 1]} ${intake.intakeYear}`,
+    intakeYear: intake.intakeYear,
+  };
+}
+
+async function resolveLegacyAcademicSelection(tenantId, data) {
+  if (!data.universityId) return {};
+  const university = await prisma.university.findFirst({
+    where: {
+      id: data.universityId,
+      isActive: true,
+      OR: [{ tenantId }, { assignedTenants: { some: { id: tenantId } } }],
+    },
+    select: { id: true, city: true, courses: true, intakes: true },
+  });
+  if (!university) throw { statusCode: 400, message: 'Selected university is not available' };
+
+  const courses = Array.isArray(university.courses) ? university.courses : [];
+  if (!courses.length) return { universityId: university.id };
+  const course = courses.find((row) => row?.name === data.program);
+  if (!course) throw { statusCode: 400, message: 'Selected course is not available at this university' };
+
+  const campusCode = String(data.campusCode || data.campusId || '').split(':').at(-1) || '';
+  const codes = Array.isArray(course.campusCodes) ? course.campusCodes : [];
+  const names = Array.isArray(course.campuses) ? course.campuses : [];
+  const allowedCodes = codes.length ? codes : (names.length ? names : ['MAIN']);
+  if (!campusCode || !allowedCodes.includes(campusCode)) {
+    throw { statusCode: 400, message: 'Selected course is not available at this campus' };
+  }
+  const campusIndex = allowedCodes.indexOf(campusCode);
+  const campusName = names[campusIndex] || data.campus || (campusCode === 'MAIN' ? university.city || 'Main Campus' : campusCode);
+
+  const configuredIntakes = Array.isArray(university.intakes) ? university.intakes : [];
+  if (configuredIntakes.length && data.intake && !configuredIntakes.includes(data.intake)) {
+    throw { statusCode: 400, message: 'Selected intake is not available at this university' };
+  }
+  return {
+    universityId: university.id,
+    campusId: `${university.id}:${campusCode}`,
+    campusCode,
+    campus: campusName,
+    programmeId: data.programmeId || `${university.id}:${course.name}`,
+    program: course.name,
+  };
+}
+
+function normalizeEnglishProficiency(value) {
+  const normalized = String(value || 'NONE').trim().toUpperCase().replace(/NOT_AVAILABLE|NOT AVAILABLE|N\/A/g, 'NONE');
+  if (!ENGLISH_PROFICIENCY_OPTIONS.includes(normalized)) {
+    throw { statusCode: 400, message: 'Invalid English Proficiency option' };
+  }
+  return normalized;
+}
 
 class ApplicationService {
   // ─── Create ───────────────────────────────────────────────────────────────
 
   async createApplication(tenantId, userId, data, io) {
     const referenceNo = generateReferenceNo('MR');
+    const intakeData = await resolveApplicationIntake(tenantId, data.intakeId, { requireAvailable: true });
+    const academicData = intakeData || await resolveLegacyAcademicSelection(tenantId, data);
+    if (data.universityId && !intakeData) {
+      const configuredIntakeCount = await prisma.intake.count({
+        where: {
+          tenantId,
+          universityId: data.universityId,
+          isActive: true,
+          isAvailableForInternationalStudents: true,
+          status: { in: ['OPEN', 'CLOSING_SOON', 'UPCOMING'] },
+        },
+      });
+      if (configuredIntakeCount > 0) {
+        throw { statusCode: 400, message: 'Campus, course, and intake selection is required for this university' };
+      }
+    }
 
     const application = await prisma.application.create({
       data: {
-        tenantId, studentId: data.studentId, universityId: data.universityId,
+        tenantId, studentId: data.studentId, universityId: academicData.universityId || data.universityId,
         agentId: data.agentId || userId, createdById: userId, referenceNo,
         program: data.program, intake: data.intake,
         intakeYear: data.intakeYear ? parseInt(data.intakeYear) : null,
-        country: data.country, priority: data.priority || 'MEDIUM',
+        ...academicData,
+        country: data.country,
+        englishProficiency: normalizeEnglishProficiency(data.englishProficiency),
+        priority: data.priority || 'MEDIUM',
         status: 'SUBMITTED', progressPct: 0,
       },
       include: this._baseInclude(),
@@ -111,6 +215,33 @@ class ApplicationService {
     return { applications, pagination: getPaginationMeta(total, page, limit) };
   }
 
+  async listDeletedApplications(tenantId, query) {
+    const { page, limit, skip } = getPagination(query);
+    const { search } = query;
+    const where = {
+      ...(tenantId && { tenantId }),
+      deletedAt: { not: null },
+      ...(search && {
+        OR: [
+          { referenceNo: { contains: search, mode: 'insensitive' } },
+          { program: { contains: search, mode: 'insensitive' } },
+          { student: { fullName: { contains: search, mode: 'insensitive' } } },
+          { student: { passportNumber: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+
+    const [applications, total] = await Promise.all([
+      prisma.application.findMany({
+        where, skip, take: limit,
+        orderBy: { deletedAt: 'desc' },
+        include: this._listInclude(),
+      }),
+      prisma.application.count({ where }),
+    ]);
+    return { applications, pagination: getPaginationMeta(total, page, limit) };
+  }
+
   // ─── Get ──────────────────────────────────────────────────────────────────
 
   async getApplication(id, tenantId, userId, userRole) {
@@ -121,7 +252,6 @@ class ApplicationService {
       where, include: this._detailInclude(),
     });
     if (!application) throw { statusCode: 404, message: 'Application not found' };
-    application.mdac = serializeMdac(application);
     return application;
   }
 
@@ -129,15 +259,30 @@ class ApplicationService {
 
   async updateApplication(id, tenantId, data) {
     await this._assertExists(id, tenantId);
+    const updateData = {};
+    const hasField = (field) => Object.prototype.hasOwnProperty.call(data, field);
+
+    if (hasField('intakeId') && data.intakeId) {
+      Object.assign(updateData, await resolveApplicationIntake(tenantId, data.intakeId));
+    } else if (hasField('universityId') || hasField('program') || hasField('campusId')) {
+      Object.assign(updateData, await resolveLegacyAcademicSelection(tenantId, data));
+    }
+
+    if (hasField('universityId') && !updateData.intakeId) updateData.universityId = data.universityId || null;
+    if (hasField('agentId')) updateData.agentId = data.agentId || null;
+    if (hasField('program') && !updateData.intakeId) updateData.program = data.program;
+    if (hasField('intake') && !updateData.intakeId) updateData.intake = data.intake;
+    if (hasField('intakeYear') && !updateData.intakeId) updateData.intakeYear = data.intakeYear ? parseInt(data.intakeYear) : null;
+    if (hasField('country')) updateData.country = data.country;
+    if (hasField('englishProficiency')) {
+      updateData.englishProficiency = normalizeEnglishProficiency(data.englishProficiency);
+    }
+    if (hasField('priority')) updateData.priority = data.priority;
+    if (hasField('rejectionReason')) updateData.rejectionReason = data.rejectionReason;
+
     return prisma.application.update({
       where: { id },
-      data: {
-        universityId: data.universityId, agentId: data.agentId,
-        program: data.program, intake: data.intake,
-        intakeYear: data.intakeYear ? parseInt(data.intakeYear) : undefined,
-        country: data.country, priority: data.priority,
-        rejectionReason: data.rejectionReason,
-      },
+      data: updateData,
       include: this._baseInclude(),
     });
   }
@@ -236,6 +381,20 @@ class ApplicationService {
     await this._recordStatusHistory(id, userId, oldStatus, newStatus, notes);
     await this._notifyAgent(application, tenantId, id, 'STATUS_CHANGED', 'Application Status Updated',
       `${application.referenceNo} moved to ${newStatus.replace(/_/g, ' ')}`, io);
+    whatsapp.notify('application_status_updated', updated, {
+      status: newStatus.replace(/_/g, ' '),
+    });
+    // OFFER_LETTER_ISSUED is only a workflow stage. Send its email after the
+    // actual document upload so the offer letter can be attached.
+    if (newStatus !== 'OFFER_LETTER_ISSUED') {
+      emailNotify.notify('application_status_updated', updated, {
+        status: newStatus.replace(/_/g, ' '),
+        notifyTenantAdmin: ['REJECTED', 'COMPLETED'].includes(newStatus),
+      });
+    }
+    if (newStatus === 'COMPLETED') {
+      emailNotify.notify('application_successful', updated);
+    }
 
     if (io) {
       io.to(`tenant:${tenantId}`).emit('application:statusChanged', {
@@ -317,6 +476,7 @@ class ApplicationService {
     return require('../../services/offerLetterIssuedNotification').sendOfferLetterIssued({
       applicationId: id, tenantId, documentId: document.id, initiatedByUserId: userId,
       file: { buffer, mimetype: document.mimeType, originalname: document.originalName },
+      forceResend: true,
     });
   }
 
@@ -356,6 +516,7 @@ class ApplicationService {
       include: this._detailInclude(),
     });
     whatsapp.notify('payment_proof_uploaded', updated);
+    emailNotify.notify('payment_proof_uploaded', updated);
     return updated;
   }
 
@@ -384,6 +545,7 @@ class ApplicationService {
       include: this._detailInclude(),
     });
     whatsapp.notify('payment_verified', updated);
+    emailNotify.notify('payment_verified', updated);
     return updated;
   }
 
@@ -487,6 +649,14 @@ class ApplicationService {
       });
     }
 
+    emailNotify.notify('application_status_updated', updated, {
+      status: newStatus.replace(/_/g, ' '),
+      notifyTenantAdmin: newStatus === 'COMPLETED',
+    });
+    if (newStatus === 'COMPLETED') {
+      emailNotify.notify('application_successful', updated);
+    }
+
     return updated;
   }
 
@@ -572,6 +742,9 @@ class ApplicationService {
         arrivalDate: new Date(arrivalDate).toISOString().slice(0, 10),
       });
     }
+    if (file) {
+      emailNotify.notify('flight_ticket_uploaded', updated);
+    }
     return updated;
   }
 
@@ -594,6 +767,7 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('evisa_approved', updated);
+    emailNotify.notify('evisa_approved', updated);
     return updated;
   }
 
@@ -610,6 +784,7 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('emgs_approved', updated);
+    emailNotify.notify('emgs_approved', updated);
     return updated;
   }
 
@@ -626,6 +801,7 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('eval_approved', updated);
+    emailNotify.notify('eval_approved', updated);
     return updated;
   }
 
@@ -683,7 +859,7 @@ class ApplicationService {
     }
 
     // Verify (approve) → also issue the tuition invoice as before
-    return prisma.application.update({
+    const updated = await prisma.application.update({
       where: { id },
       data: {
         tuitionVerificationStatus: 'VERIFIED',
@@ -695,6 +871,8 @@ class ApplicationService {
       },
       include: this._baseInclude(),
     });
+    emailNotify.notify('arrival_payment_verified', updated);
+    return updated;
   }
 
   // ─── Commission payout status (TENANT_ADMIN only) ─────────────────────────
@@ -767,6 +945,41 @@ class ApplicationService {
     }
     await this._assertExists(id, tenantId);
     return prisma.application.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  async restoreApplication(id, tenantId) {
+    const application = await prisma.application.findFirst({
+      where: { id, ...(tenantId && { tenantId }), deletedAt: { not: null } },
+      include: { student: { select: { deletedAt: true } } },
+    });
+    if (!application) throw { statusCode: 404, message: 'Deleted application not found' };
+    if (application.student.deletedAt) {
+      throw { statusCode: 409, message: 'Restore the student profile before restoring this application' };
+    }
+    return prisma.application.update({
+      where: { id },
+      data: { deletedAt: null },
+      include: this._listInclude(),
+    });
+  }
+
+  async permanentlyDeleteApplication(id, tenantId) {
+    const application = await prisma.application.findFirst({
+      where: { id, ...(tenantId && { tenantId }), deletedAt: { not: null } },
+      select: { id: true },
+    });
+    if (!application) throw { statusCode: 404, message: 'Deleted application not found' };
+
+    return prisma.$transaction(async (tx) => {
+      // Preserve shared student records and financial/document history while
+      // removing their link to the permanently deleted application.
+      await tx.notification.updateMany({ where: { applicationId: id }, data: { applicationId: null } });
+      await tx.agentCommission.updateMany({ where: { applicationId: id }, data: { applicationId: null } });
+      await tx.payment.updateMany({ where: { applicationId: id }, data: { applicationId: null } });
+      await tx.document.updateMany({ where: { applicationId: id }, data: { applicationId: null } });
+      await tx.lOE.deleteMany({ where: { applicationId: id } });
+      return tx.application.delete({ where: { id } });
+    });
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
@@ -874,6 +1087,7 @@ class ApplicationService {
       student: { select: { id: true, fullName: true, passportNumber: true, nationality: true, photo: true } },
       university: { select: { id: true, name: true, country: true, email: true } },
       agent: { select: { id: true, firstName: true, lastName: true, avatar: true } },
+      intakeRecord: { select: { id: true, campusId: true, campusCode: true, campusName: true, programmeId: true, programmeName: true, studyLevel: true, intakeMonth: true, intakeYear: true, intakeType: true, status: true } },
     };
   }
 
@@ -886,6 +1100,7 @@ class ApplicationService {
       student: true,
       university: true,
       agent: { select: { id: true, firstName: true, lastName: true, avatar: true, email: true } },
+      intakeRecord: true,
       createdBy: { select: { firstName: true, lastName: true } },
       acceptedBy: { select: { firstName: true, lastName: true } },
       offerLetterUploadedBy: { select: { firstName: true, lastName: true } },
@@ -895,7 +1110,6 @@ class ApplicationService {
       evisaUploadedBy: { select: { firstName: true, lastName: true } },
       tuitionProofUploadedBy: { select: { firstName: true, lastName: true } },
       tuitionVerifiedBy: { select: { firstName: true, lastName: true } },
-      mdacVerifiedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
       documents: {
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
