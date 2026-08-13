@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Loader2, Save, User, Lock, Bell, MessageCircle, Building2, Upload } from 'lucide-react';
+import { Loader2, Save, User, Lock, Bell, MessageCircle, Building2, Upload, CreditCard } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { authAPI, tenantAPI } from '../../api/endpoints';
 import { useAuthStore } from '../../store/authStore';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { toast } from '../../components/ui/toast';
 import { getInitials } from '../../lib/utils';
 import WhatsAppSettings from '../../components/settings/WhatsAppSettings';
+import PaymentAccountsSettings from '../../components/settings/PaymentAccountsSettings';
 
 function Field({ label, error, children }) {
   return (
@@ -117,6 +118,7 @@ export default function Settings() {
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     ...(isTenantAdmin ? [{ id: 'company', label: 'Company', icon: Building2 }] : []),
+    ...(isTenantAdmin ? [{ id: 'paymentAccounts', label: 'Payment Accounts', icon: CreditCard }] : []),
     { id: 'password', label: 'Password', icon: Lock },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     ...(isTenantAdmin ? [{ id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle }] : []),
@@ -141,7 +143,8 @@ export default function Settings() {
         ))}
       </div>
 
-      <div className={activeTab === 'whatsapp' ? 'max-w-3xl' : 'max-w-xl'}>
+      <div className={['whatsapp', 'paymentAccounts'].includes(activeTab) ? 'max-w-3xl' : 'max-w-xl'}>
+        {activeTab === 'paymentAccounts' && isTenantAdmin && <PaymentAccountsSettings />}
         {/* WhatsApp Tab (tenant admin) */}
         {activeTab === 'whatsapp' && isTenantAdmin && <WhatsAppSettings />}
 
