@@ -130,6 +130,12 @@ function IWantToMenu({ app, user, onAction }) {
     }
   }
 
+  // Admins must be able to soft-delete from every workflow stage, including
+  // payment-proof and payment-verified states.
+  if (isAdmin && !actions.some((action) => action.id === 'delete')) {
+    actions.push({ id: 'delete', label: 'Delete Application', icon: Trash2, variant: 'danger' });
+  }
+
   if (!actions.length) return null;
 
   return (
@@ -837,7 +843,7 @@ export default function ApplicationDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Permanently delete this application?')) return;
+    if (!window.confirm('Delete this application? It can be restored from Restore.')) return;
     setProcessing(true);
     try {
       await applicationAPI.delete(id);
