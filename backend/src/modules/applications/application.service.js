@@ -5,6 +5,7 @@ const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 const { generateReferenceNo } = require('../../utils/generateReference');
 const whatsapp = require('../../services/whatsappNotify');
 const emailNotify = require('../../services/emailNotify');
+const documentService = require('../documents/document.service');
 
 // Pre-EMGS progress milestones
 const STATUS_PROGRESS = {
@@ -529,6 +530,49 @@ class ApplicationService {
     whatsapp.notify('payment_proof_uploaded', updated);
     emailNotify.notify('payment_proof_uploaded', updated);
     return updated;
+  }
+
+  async deleteWorkflowDocument(id, tenantId, userRole, kind) {
+    if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
+      throw { statusCode: 403, message: 'Only admins can delete workflow documents' };
+    }
+
+    const definitions = {
+      'offer-letter': {
+        urlField: 'offerLetterUrl',
+        documentType: 'OFFER_LETTER',
+        clear: { offerLetterUrl: null, offerLetterUploadedById: null, offerLetterUploadedAt: null },
+      },
+      'payment-proof': {
+        urlField: 'paymentProofUrl',
+        documentType: 'BANK_STATEMENT',
+        clear: {
+          paymentProofUrl: null, paymentProofUploadedById: null, paymentProofUploadedAt: null,
+          paymentVerifiedById: null, paymentVerifiedAt: null,
+        },
+      },
+    };
+    const definition = definitions[kind];
+    if (!definition) throw { statusCode: 400, message: 'Unsupported workflow document type' };
+
+    const application = await this._assertExists(id, tenantId);
+    const fileUrl = application[definition.urlField];
+    if (!fileUrl) throw { statusCode: 404, message: 'Workflow document not found' };
+
+    const document = await prisma.document.findFirst({
+      where: {
+        tenantId, applicationId: id, studentId: application.studentId,
+        type: definition.documentType, fileUrl, deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (document) await documentService.deleteDocument(document.id, tenantId);
+
+    return prisma.application.update({
+      where: { id },
+      data: definition.clear,
+      include: this._detailInclude(),
+    });
   }
 
   // ─── Verify Payment (TENANT_ADMIN only) ───────────────────────────────────

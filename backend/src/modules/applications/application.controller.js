@@ -70,6 +70,13 @@ const uploadPaymentProof = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, application, 'Payment proof uploaded successfully');
 });
 
+const deleteWorkflowDocument = asyncHandler(async (req, res) => {
+  const application = await applicationService.deleteWorkflowDocument(
+    req.params.id, req.tenantId, req.user.role, req.params.kind
+  );
+  return ApiResponse.success(res, application, 'Workflow document deleted');
+});
+
 const verifyPayment = asyncHandler(async (req, res) => {
   const { notes } = req.body;
   const application = await applicationService.verifyPayment(
@@ -202,7 +209,7 @@ const permanentlyDeleteApplication = asyncHandler(async (req, res) => {
 
 module.exports = {
   createApplication, listApplications, getApplication, updateApplication,
-  acceptApplication, updateStatus, uploadOfferLetter, uploadPaymentProof,
+  acceptApplication, updateStatus, uploadOfferLetter, uploadPaymentProof, deleteWorkflowDocument,
   verifyPayment, issueInvoice, updateEmgsProgress, updatePostEvalStatus,
   updateArrival, uploadEvisa, uploadEmgsApproval, uploadEvalApproval,
   uploadTuitionProof, verifyTuition, setCommissionStatus,

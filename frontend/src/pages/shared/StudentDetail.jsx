@@ -217,8 +217,8 @@ export default function StudentDetail() {
   // Workflow documents uploaded against this student's applications (offer letter,
   // payment, EMGS/eVAL approvals, eVisa, flight ticket, tuition proof).
   const WF_DOC_DEFS = [
-    ['offerLetterUrl', 'Offer Letter'],
-    ['paymentProofUrl', 'EMGS Payment Proof'],
+    ['offerLetterUrl', 'Offer Letter', 'offer-letter'],
+    ['paymentProofUrl', 'EMGS Payment Proof', 'payment-proof'],
     ['emgsApprovalUrl', 'EMGS Approval Letter'],
     ['evalApprovalUrl', 'eVAL Approval Letter'],
     ['evisaUrl', 'eVisa'],
@@ -226,8 +226,8 @@ export default function StudentDetail() {
     ['tuitionProofUrl', 'Tuition Payment Proof'],
   ];
   const appDocs = applications.flatMap((a) =>
-    WF_DOC_DEFS.filter(([field]) => a[field]).map(([field, label]) => ({
-      key: `${a.id}-${field}`, label, url: a[field], subtitle: a.referenceNo, appId: a.id,
+    WF_DOC_DEFS.filter(([field]) => a[field]).map(([field, label, deleteKind]) => ({
+      key: `${a.id}-${field}`, label, url: a[field], subtitle: a.referenceNo, appId: a.id, deleteKind,
     }))
   );
   const totalDocCount = documents.length + appDocs.length;
@@ -583,10 +583,7 @@ export default function StudentDetail() {
           <DocumentTimeline
             documents={documents}
             canDelete={canDelete}
-            onRefresh={async () => {
-              const dRes = await documentAPI.list(id);
-              setDocuments(dRes.data.data || []);
-            }}
+            onRefresh={fetchAll}
           />
           <DocumentUploadSection
             student={student}

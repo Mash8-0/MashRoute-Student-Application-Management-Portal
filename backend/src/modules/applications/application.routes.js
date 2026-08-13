@@ -71,6 +71,10 @@ router.post('/:id/offer-letter-email/retry', authorize('TENANT_ADMIN', 'SUPER_AD
 // Payment proof: all authenticated users (enforced in service for pre-conditions)
 router.post('/:id/payment-proof', upload.single('file'), logActivity('UPLOAD_PAYMENT_PROOF', 'Application'), controller.uploadPaymentProof);
 
+// Workflow document deletion: admins only. Clears both the stored Document and
+// the denormalized URL/metadata kept on the Application.
+router.delete('/:id/workflow-document/:kind', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('DELETE_WORKFLOW_DOCUMENT', 'Application'), controller.deleteWorkflowDocument);
+
 // Verify payment: TENANT_ADMIN only (enforced in service)
 router.post('/:id/verify-payment', logActivity('VERIFY_PAYMENT', 'Application'), controller.verifyPayment);
 

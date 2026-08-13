@@ -101,6 +101,7 @@ export const applicationAPI = {
   uploadPaymentProof: (id, formData) => api.post(`/applications/${id}/payment-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  deleteWorkflowDocument: (id, kind) => api.delete(`/applications/${id}/workflow-document/${kind}`),
   verifyPayment: (id, notes) => api.post(`/applications/${id}/verify-payment`, { notes }),
   issueInvoice: (id, notes) => api.post(`/applications/${id}/issue-invoice`, { notes }),
   updateEmgs: (id, percentage, notes) => api.patch(`/applications/${id}/emgs`, { percentage, notes }),
