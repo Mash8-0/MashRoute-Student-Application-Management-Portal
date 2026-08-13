@@ -98,7 +98,7 @@ function createApplicationNotificationTemplate({
     const isLast = index === rows.length - 1;
     return `
     <tr>
-      <td class="detailLabel${isLast ? ' lastDetail' : ''}" width="38%" style="width:38%;padding:6px 12px${isLast ? ' 14px' : ''};color:#CBD5E1;font-size:13px;font-weight:700;line-height:1.35;text-align:right;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+      <td class="detailLabel${isLast ? ' lastDetail' : ''}" width="38%" style="width:38%;padding:6px 12px${isLast ? ' 14px' : ''};color:#CBD5E1;font-size:13px;font-weight:700;line-height:1.35;text-align:left;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
       <td class="detailValue${isLast ? ' lastDetail' : ''}" width="62%" style="width:62%;padding:6px 12px${isLast ? ' 14px' : ''};color:#F8FAFC;font-size:13px;font-weight:700;line-height:1.35;text-align:left;vertical-align:top;word-break:break-word;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;font-size:inherit;line-height:inherit;"><tr><td width="16" style="width:16px;color:#F8FAFC;font-weight:700;text-align:left;vertical-align:top;">:</td><td style="color:#F8FAFC;font-weight:700;text-align:left;vertical-align:top;word-break:break-word;">${escapeHtml(value)}</td></tr></table></td>
     </tr>
   `;
