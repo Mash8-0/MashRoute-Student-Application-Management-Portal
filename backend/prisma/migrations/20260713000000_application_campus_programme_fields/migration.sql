@@ -1,0 +1,3 @@
+ALTER TABLE "Application" ADD COLUMN IF NOT EXISTS "campusId" TEXT;
+ALTER TABLE "Application" ADD COLUMN IF NOT EXISTS "campusCode" TEXT;
+ALTER TABLE "Application" ADD COLUMN IF NOT EXISTS "programmeId" TEXT;
