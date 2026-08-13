@@ -63,6 +63,11 @@ export default function Students() {
       render: (val) => <span className="text-sm">{val || '—'}</span>,
     },
     {
+      key: 'applications',
+      label: 'University',
+      render: (val) => <span className="text-sm">{val?.[0]?.university?.name || '—'}</span>,
+    },
+    {
       key: 'hasIELTS',
       label: 'IELTS',
       render: (val, row) => val ? (
@@ -92,15 +97,6 @@ export default function Students() {
       key: 'assignedStaff', label: 'Assigned Staff', render: (val) => val
         ? <span className="whitespace-nowrap font-medium">{val.firstName} {val.lastName}</span>
         : <span className="whitespace-nowrap text-xs text-muted-foreground">Not assigned</span>,
-    },
-    {
-      key: 'id',
-      label: '',
-      render: (val) => (
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/students/${val}`)} className="text-xs">
-          View
-        </Button>
-      ),
     },
   ];
 
@@ -134,6 +130,7 @@ export default function Students() {
         loading={loading}
         pagination={pagination}
         onPageChange={setPage}
+        onRowClick={(row) => navigate(`/students/${row.id}`)}
         emptyMessage="No students found. Add your first student."
       />
     </div>

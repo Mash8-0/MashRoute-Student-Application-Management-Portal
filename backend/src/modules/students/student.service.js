@@ -74,6 +74,12 @@ class StudentService {
             take: 1,
             select: { id: true, type: true, fileUrl: true, driveViewLink: true, deletedAt: true },
           },
+          applications: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, university: { select: { id: true, name: true } } },
+          },
           _count: {
             select: {
               applications: { where: { deletedAt: null } },
