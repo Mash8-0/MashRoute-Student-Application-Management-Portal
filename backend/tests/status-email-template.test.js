@@ -88,6 +88,8 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   const service = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
   const routes = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.routes.js'), 'utf8');
   const ui = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/ApplicationDetail.jsx'), 'utf8');
+  const studentUi = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/StudentDetail.jsx'), 'utf8');
+  const modal = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/payments/TuitionPaymentSetupModal.jsx'), 'utf8');
   assert.match(service, /async requestTuitionPayment/);
   assert.match(service, /async openTuitionPayment/);
   assert.match(service, /Only admins can open tuition payment and generate the folio/);
@@ -97,7 +99,11 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   assert.match(routes, /tuition-request', authorize\('STAFF', 'REGISTERED_AGENT'\)/);
   assert.match(service, /application\.agentId !== userId/);
   assert.match(ui, /Request Tuition Payment/);
-  assert.match(ui, /Generate Tuition Folio/);
+  assert.match(ui, /tab=payment&tuitionApp=/);
+  assert.doesNotMatch(ui, /window\.prompt\('Tuition fee amount/);
+  assert.match(studentUi, /TuitionPaymentSetupModal/);
+  assert.match(modal, /Open Tuition Fees Payment & Generate Tuition Fees Folio/);
+  assert.match(modal, /applicationAPI\.openTuitionPayment/);
   assert.match(ui, /\|\| !!app\.evisaUrl \|\|/);
 });
 

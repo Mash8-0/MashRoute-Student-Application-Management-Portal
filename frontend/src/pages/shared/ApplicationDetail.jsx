@@ -751,25 +751,8 @@ export default function ApplicationDetail() {
     }
   };
 
-  const handleRequestTuitionPayment = async () => {
-    const note = window.prompt('Optional note for the admin:', '') ?? null;
-    if (note === null) return;
-    setProcessing(true);
-    try { await applicationAPI.requestTuitionPayment(id, note); await fetchApplication(true); toast.success('Tuition payment request sent to admin'); }
-    catch (err) { toast.error(err.response?.data?.message || 'Failed to request tuition payment'); }
-    finally { setProcessing(false); }
-  };
-
-  const handleOpenTuitionPayment = async () => {
-    const amount = window.prompt('Tuition fee amount (MYR):');
-    if (amount === null) return;
-    const dueDate = window.prompt('Payment due date (YYYY-MM-DD):', new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
-    if (dueDate === null) return;
-    setProcessing(true);
-    try { await applicationAPI.openTuitionPayment(id, { amount, currency: 'MYR', dueDate, description: 'Tuition Fees' }); await fetchApplication(true); toast.success('Tuition payment opened and folio emailed'); }
-    catch (err) { toast.error(err.response?.data?.message || 'Failed to open tuition payment'); }
-    finally { setProcessing(false); }
-  };
+  const openTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment&tuitionApp=${app.id}`);
+  const viewTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment`);
 
   const handleUploadFlightTicket = async (file) => {
     if (!file) { toast.error('Please select a file'); return; }
@@ -1492,12 +1475,12 @@ export default function ApplicationDetail() {
                 ) : isAdmin ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
                     <div><p className="text-sm font-semibold">{tuitionRequest ? 'Tuition payment requested' : 'Open tuition payment'}</p><p className="text-xs text-muted-foreground">Generate the payment folio after confirming the fee and due date.</p></div>
-                    <Button size="sm" onClick={handleOpenTuitionPayment} disabled={processing || !app.evisaUrl}>{processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />} Generate Tuition Folio</Button>
+                    <Button size="sm" onClick={openTuitionInPaymentTab} disabled={!app.evisaUrl}><Receipt className="h-3.5 w-3.5" /> Open Tuition Fees Payment &amp; Generate Tuition Fees Folio</Button>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <div><p className="text-sm font-semibold text-amber-800">{tuitionRequest ? 'Request awaiting admin' : 'Tuition payment is not open'}</p><p className="text-xs text-amber-700">Ask an admin to configure the tuition fee and issue the folio.</p></div>
-                    {!tuitionRequest && <Button size="sm" variant="outline" onClick={handleRequestTuitionPayment} disabled={processing || !app.evisaUrl}>Request Tuition Payment</Button>}
+                    {!tuitionRequest && <Button size="sm" variant="outline" onClick={viewTuitionInPaymentTab} disabled={!app.evisaUrl}>Request Tuition Payment</Button>}
                   </div>
                 )}
               </div>
