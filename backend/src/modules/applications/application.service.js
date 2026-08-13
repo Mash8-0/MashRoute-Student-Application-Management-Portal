@@ -978,6 +978,19 @@ class ApplicationService {
     const dueDate = new Date(data.dueDate);
     if (Number.isNaN(dueDate.getTime())) throw { statusCode: 400, message: 'A valid tuition due date is required.' };
     const currency = String(data.currency || 'MYR').toUpperCase();
+    const accountType = data.accountType === 'UNIVERSITY_ACCOUNT' ? 'UNIVERSITY_ACCOUNT' : 'TENANT_ACCOUNT';
+    const destinationAccount = await prisma.paymentDestinationAccount.findFirst({ where: {
+      id: data.destinationAccountId, tenantId, accountType, currency, isActive: true, archivedAt: null,
+      ...(accountType === 'UNIVERSITY_ACCOUNT' ? { universityId: application.universityId } : {}),
+    } });
+    if (!destinationAccount) throw { statusCode: 400, message: 'Select an eligible active payment account for this destination and currency.' };
+    const paymentAccountSnapshot = {
+      accountType: destinationAccount.accountType, accountLabel: destinationAccount.label,
+      accountHolderName: destinationAccount.accountHolderName, bankName: destinationAccount.bankName,
+      maskedAccountNumber: destinationAccount.maskedAccountNumber, currency: destinationAccount.currency,
+      branchName: destinationAccount.branchName, swiftBic: destinationAccount.swiftBic,
+      paymentInstructions: destinationAccount.paymentInstructions,
+    };
 
     const result = await prisma.$transaction(async (tx) => {
       let payment = await tx.payment.findFirst({ where: { tenantId, applicationId: id, paymentType: 'TUITION' }, orderBy: { createdAt: 'desc' } });
@@ -995,6 +1008,7 @@ class ApplicationService {
         universityName: application.university?.name, programmeName: application.program, intake: application.intake,
         referenceNo: application.referenceNo, tenantName: application.tenant.name, tenantEmail: application.tenant.email,
         tenantPhone: application.tenant.phone, tenantAddress: application.tenant.address,
+        paymentDestinationType: accountType, destinationAccountId: destinationAccount.id, paymentAccountSnapshot,
         notes: data.notes || 'Please pay the tuition fees by the due date and upload payment proof in MashRoute.',
       } });
       await tx.invoiceItem.create({ data: { id: crypto.randomUUID(), invoiceId, description: data.description || 'Tuition Fees', quantity: 1, unitPrice: amount, amount, updatedAt: new Date() } });

@@ -104,6 +104,10 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   assert.match(studentUi, /TuitionPaymentSetupModal/);
   assert.match(modal, /Open Tuition Fees Payment & Generate Tuition Fees Folio/);
   assert.match(modal, /applicationAPI\.openTuitionPayment/);
+  assert.match(modal, /Select Payment Account/);
+  assert.match(modal, /Tenant \/ Admin Account/);
+  assert.match(service, /paymentDestinationAccount\.findFirst/);
+  assert.match(service, /paymentAccountSnapshot/);
   assert.match(ui, /\|\| !!app\.evisaUrl \|\|/);
 });
 
