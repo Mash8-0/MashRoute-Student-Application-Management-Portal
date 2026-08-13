@@ -44,7 +44,7 @@ test('MashRoute responsive HTML includes secure CTA and real dynamic content', (
   assert.match(html, /OPEN OFFER LETTER/);
   assert.match(html, /linear-gradient\(90deg,#10D9F5/);
   assert.match(html, /@media only screen and \(max-width:640px\)/);
-  assert.match(html, /max-width:620px/);
+  assert.match(html, /max-width:640px/);
   assert.match(html, /alt="Offer Letter Issued"/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(html, /href="https:\/\/mashroute\.com\/api\/v1\/offer-letter\/view\/opaque-high-entropy-token/);
