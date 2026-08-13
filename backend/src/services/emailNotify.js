@@ -54,7 +54,7 @@ const EVENT_DEFS = {
     title: 'Application Status Updated',
     subject: 'MashRoute: Application Status Updated',
     roles: ['STUDENT', 'ASSIGNED'],
-    message: 'The application status has been updated.',
+    message: 'Your application has moved to the next stage.\nYou can review the latest details below.',
   },
 };
 
@@ -96,8 +96,8 @@ function createApplicationNotificationTemplate({
 
   const detailRows = rows.map(([label, value]) => `
     <tr>
-      <td class="detailLabel" width="34%" style="padding:6px 16px;color:#CBD5E1;font-size:13px;line-height:1.35;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
-      <td class="detailValue" style="padding:6px 16px;color:#F8FAFC;font-size:13px;font-weight:600;line-height:1.35;vertical-align:top;word-break:break-word;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;font-size:inherit;line-height:inherit;"><tr><td width="16" style="width:16px;color:#94A3B8;vertical-align:top;">:</td><td style="color:#F8FAFC;vertical-align:top;word-break:break-word;">${escapeHtml(value)}</td></tr></table></td>
+      <td class="detailLabel" width="31%" style="width:31%;padding:6px 12px;color:#CBD5E1;font-size:13px;line-height:1.35;text-align:left;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+      <td class="detailValue" width="69%" style="width:69%;padding:6px 12px;color:#F8FAFC;font-size:13px;font-weight:600;line-height:1.35;text-align:left;vertical-align:top;word-break:break-word;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;font-size:inherit;line-height:inherit;"><tr><td width="16" style="width:16px;color:#94A3B8;text-align:left;vertical-align:top;">:</td><td style="color:#F8FAFC;text-align:left;vertical-align:top;word-break:break-word;">${escapeHtml(value)}</td></tr></table></td>
     </tr>
   `).join('');
 
@@ -110,11 +110,10 @@ function createApplicationNotificationTemplate({
 <tr><td class="pad" style="padding:22px 20px 24px;text-align:center;">
 <div style="display:inline-block;margin:0 0 12px;padding:6px 12px;border:1px solid #2388FF;border-radius:999px;color:#10D9F5;font-size:11px;font-weight:700;letter-spacing:.7px;">APPLICATION UPDATE</div>
 <h1 class="heading" style="margin:0;color:#F8FAFC;font-size:27px;line-height:1.2;"><span class="gradientText" style="color:#10D9F5;">${escapeHtml(title)}</span></h1>
-<p class="message" style="margin:14px auto 12px;max-width:500px;color:#CBD5E1;font-size:14px;line-height:1.6;">${escapeHtml(message)}</p>
+<p class="message" style="margin:14px auto 12px;max-width:500px;color:#CBD5E1;font-size:14px;line-height:1.6;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
 ${status ? `<div class="statusPill" style="display:inline-block;margin:0 0 18px;padding:7px 13px;background:#0B2040;border:1px solid #334561;border-radius:999px;color:#F8FAFC;font-size:12px;font-weight:700;letter-spacing:.4px;">${escapeHtml(labelStatus(status))}</div>` : ''}
 <table class="details" role="presentation" width="90%" align="center" cellpadding="0" cellspacing="0" style="width:90%;margin:0 auto 20px;background:#08172E;border:1px solid #334561;border-radius:16px;">
 <tr><td colspan="2" style="padding:11px 16px 8px;border-bottom:1px solid #334561;color:#10D9F5;font-size:13px;font-weight:700;text-align:left;"><span class="gradientText" style="color:#10D9F5;">APPLICATION DETAILS</span></td></tr>${detailRows}</table>
-${dashboardUrl ? `<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${escapeHtml(dashboardUrl)}" style="height:44px;v-text-anchor:middle;width:190px;" arcsize="20%" fillcolor="#2388FF" strokecolor="#2388FF"><w:anchorlock xmlns:w="urn:schemas-microsoft-com:office:word"/><center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;">OPEN APPLICATION</center></v:roundrect><![endif]--><!--[if !mso]><!--><table class="cta" role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;width:190px;max-width:72%;"><tr><td align="center" bgcolor="#2388FF" style="border-radius:10px;background:#2388FF;background-image:linear-gradient(90deg,#10D9F5 0%,#2388FF 48%,#8B2CF5 100%);"><a class="ctaLink" href="${escapeHtml(dashboardUrl)}" target="_blank" style="display:block;padding:13px 10px;color:#FFFFFF;font-size:13px;font-weight:700;line-height:18px;text-decoration:none;white-space:nowrap;">OPEN APPLICATION</a></td></tr></table><!--<![endif]-->` : ''}
 <table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 0;"><tr><td style="border-top:1px solid #2388FF;line-height:1px;">&nbsp;</td><td width="32" style="color:#10D9F5;font-size:16px;">&#10022;</td><td style="border-top:1px solid #8B2CF5;line-height:1px;">&nbsp;</td></tr></table>
 <p class="footer" style="margin:12px 0 0;color:#CBD5E1;font-size:12px;line-height:1.5;">This is an automated email. No reply is required.</p><p class="footer" style="margin:16px 0 2px;color:#CBD5E1;font-size:11px;">MashRoute | Student Application Management Portal</p><p class="footer" style="margin:0;color:#94A3B8;font-size:11px;">Simplifying Every Step of the Student Journey</p>
 </td></tr></table></td></tr></table></body></html>`;

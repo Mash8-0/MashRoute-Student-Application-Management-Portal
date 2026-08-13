@@ -4,7 +4,7 @@ const { createApplicationNotificationTemplate, createTextNotification } = requir
 
 const payload = {
   title: 'Application Status Updated',
-  message: 'The application status has been updated.',
+  message: 'Your application has moved to the next stage.\nYou can review the latest details below.',
   studentName: 'Ahmad Rahman',
   passportNumber: 'A12345678',
   universityName: 'INTI International University',
@@ -21,10 +21,10 @@ test('status email uses the responsive MashRoute design with dynamic details and
   assert.match(html, /AWAITING OFFER LETTER/);
   assert.match(html, /Ahmad Rahman/);
   assert.match(html, /A12345678/);
-  assert.match(html, /OPEN APPLICATION/);
+  assert.match(html, /next stage\.<br>You can review/);
+  assert.doesNotMatch(html, /OPEN APPLICATION/);
   assert.match(html, /@media only screen and \(max-width:640px\)/);
   assert.match(html, /linear-gradient\(90deg,#10D9F5/);
-  assert.match(html, /href="https:\/\/mashroute\.com\/applications\/app-1"/);
   assert.doesNotMatch(html, /undefined|null|<script/i);
 });
 
