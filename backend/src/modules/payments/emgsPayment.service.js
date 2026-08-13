@@ -95,12 +95,15 @@ async function audit(tx, { tenantId, actorId, entityType, entityId, action, oldV
 }
 
 async function listAccounts(tenantId, query = {}) {
+  const accountType = query.accountType || undefined;
   const where = {
     tenantId,
     archivedAt: null,
-    ...(query.accountType && { accountType: query.accountType }),
+    ...(accountType && { accountType }),
     ...(query.currency && { currency: currency(query.currency) }),
-    ...(query.universityId && { universityId: query.universityId }),
+    // University scoping applies only to university-owned accounts. Tenant and
+    // other destination accounts are shared within the tenant and store null.
+    ...(accountType === 'UNIVERSITY_ACCOUNT' && query.universityId && { universityId: query.universityId }),
     ...(query.includeInactive !== 'true' && { isActive: true }),
   };
   return (await prisma.paymentDestinationAccount.findMany({ where, orderBy: [{ isDefault: 'desc' }, { label: 'asc' }] })).map(publicAccount);
