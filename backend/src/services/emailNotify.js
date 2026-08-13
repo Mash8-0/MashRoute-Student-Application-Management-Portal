@@ -107,7 +107,6 @@ function createApplicationNotificationTemplate({
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(message)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;table-layout:fixed;background:#020B1D;"><tr><td class="shell" align="center" style="padding:12px 8px;">
 <table class="card" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#06132A;border:2px solid #10D9F5;border-radius:20px;overflow:hidden;box-sizing:border-box;box-shadow:0 0 30px rgba(35,136,255,.2);">
-<tr><td class="pad" style="padding:20px 20px 16px;border-bottom:1px solid #334561;text-align:left;"><div class="brand" style="color:#10D9F5;font-size:20px;font-weight:700;letter-spacing:.2px;"><span class="gradientText" style="color:#10D9F5;">MashRoute</span></div><div style="margin-top:3px;color:#94A3B8;font-size:11px;">Student Application Management Portal</div></td></tr>
 <tr><td class="pad" style="padding:22px 20px 24px;text-align:center;">
 <div style="display:inline-block;margin:0 0 12px;padding:6px 12px;border:1px solid #2388FF;border-radius:999px;color:#10D9F5;font-size:11px;font-weight:700;letter-spacing:.7px;">APPLICATION UPDATE</div>
 <h1 class="heading" style="margin:0;color:#F8FAFC;font-size:27px;line-height:1.2;"><span class="gradientText" style="color:#10D9F5;">${escapeHtml(title)}</span></h1>
