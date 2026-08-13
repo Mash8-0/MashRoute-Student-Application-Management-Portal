@@ -108,7 +108,7 @@ function IWantToMenu({ app, user, onAction }) {
       if (!app.offerLetterUrl) actions.push({ id: 'upload-ol', label: 'Upload Offer Letter', icon: Upload, variant: 'primary' });
       else {
         actions.push({ id: 'view-ol', label: 'View Offer Letter', icon: Eye });
-        actions.push({ id: 'retry-ol-email', label: 'Retry Offer Letter Issued Email', icon: Mail });
+        actions.push({ id: 'retry-ol-email', label: 'Preview & Send Offer Letter Email', icon: Mail });
       }
       actions.push({ id: 'update-status', label: 'Update Status', icon: CheckCircle2 });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
@@ -440,6 +440,8 @@ export default function ApplicationDetail() {
   const [showEmgsModal, setShowEmgsModal] = useState(false);
   const [editingPostEval, setEditingPostEval] = useState(false);
   const [previewFile, setPreviewFile] = useState(null); // { url, label }
+  const [emailPreview, setEmailPreview] = useState(null);
+  const [emailPreviewWidth, setEmailPreviewWidth] = useState('desktop');
 
   const isAdmin = ADMIN_ROLES.includes(user?.role);
   const isEmgsStage = application?.invoiceIssuedAt;
@@ -586,7 +588,9 @@ export default function ApplicationDetail() {
       const res = await applicationAPI.uploadOfferLetter(id, fd);
       setApplication(res.data.data);
       setShowUploadOL(false);
-      toast.success('Offer Letter uploaded');
+      toast.success('Offer Letter uploaded. Preview the notification before sending.');
+      const preview = await applicationAPI.previewOfferLetterIssuedEmail(id);
+      setEmailPreview(preview.data.data);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
@@ -597,11 +601,24 @@ export default function ApplicationDetail() {
   const handleRetryOfferLetterEmail = async () => {
     setProcessing(true);
     try {
+      const preview = await applicationAPI.previewOfferLetterIssuedEmail(id);
+      setEmailPreview(preview.data.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Offer Letter Issued email preview failed');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleSendOfferLetterEmail = async () => {
+    setProcessing(true);
+    try {
       const res = await applicationAPI.retryOfferLetterIssuedEmail(id);
       const sent = (res.data.data?.results || []).filter((result) => result.status === 'SENT').length;
+      setEmailPreview(null);
       toast.success(sent ? `Offer Letter Issued email sent to ${sent} recipient${sent === 1 ? '' : 's'}` : 'Offer Letter Issued email was already sent');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Offer Letter Issued email retry failed');
+      toast.error(err.response?.data?.message || 'Offer Letter Issued email send failed');
     } finally {
       setProcessing(false);
     }
@@ -902,6 +919,20 @@ export default function ApplicationDetail() {
 
   return (
     <div className="space-y-6">
+      {emailPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+              <div><p className="font-semibold">Offer Letter Issued Email Preview</p><p className="text-xs text-muted-foreground">{emailPreview.subject} · {emailPreview.recipient.type}: {emailPreview.recipient.email}</p></div>
+              <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setEmailPreviewWidth(emailPreviewWidth === 'desktop' ? 'mobile' : 'desktop')}>{emailPreviewWidth === 'desktop' ? 'Mobile preview' : 'Desktop preview'}</Button><Button variant="outline" size="sm" onClick={() => setEmailPreview(null)}>Close</Button><Button size="sm" disabled={processing} onClick={handleSendOfferLetterEmail}>{processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send Notification</Button></div>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-4 overflow-auto bg-muted/30 p-4 lg:grid-cols-[1fr_280px]">
+              <div className="mx-auto w-full overflow-hidden rounded-xl border bg-white transition-all" style={{ maxWidth: emailPreviewWidth === 'mobile' ? 390 : 760 }}><iframe title="Rendered Offer Letter email" srcDoc={emailPreview.html} className="h-[68vh] w-full border-0" sandbox="allow-popups" /></div>
+              <aside className="space-y-4 rounded-xl border bg-background p-4 text-sm"><div><p className="font-semibold">Attachment</p><p className="text-muted-foreground">{emailPreview.attachmentIncluded ? 'Official PDF included' : 'Omitted due to size; secure link included'}</p></div><div><p className="font-semibold">Plain-text preview</p><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs">{emailPreview.text}</pre></div><p className="text-xs text-muted-foreground">Opening this preview does not send email or create an active access token.</p></aside>
+            </div>
+          </div>
+        </div>
+      )}
       {/* File Preview Modal */}
       {previewFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">

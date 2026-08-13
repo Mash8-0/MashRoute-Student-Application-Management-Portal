@@ -66,6 +66,7 @@ router.patch('/:id/status', logActivity('STATUS_UPDATE', 'Application'), control
 
 // Offer Letter upload: TENANT_ADMIN only (enforced in service)
 router.post('/:id/offer-letter', upload.single('file'), logActivity('UPLOAD_OFFER_LETTER', 'Application'), controller.uploadOfferLetter);
+router.get('/:id/offer-letter-email/preview', authorize('TENANT_ADMIN', 'SUPER_ADMIN', 'STAFF'), offerLetterEmailController.previewOfferLetterIssuedEmail);
 router.post('/:id/offer-letter-email/retry', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('RETRY_OFFER_LETTER_EMAIL', 'Application'), offerLetterEmailController.retryOfferLetterIssuedEmail);
 
 // Payment proof: all authenticated users (enforced in service for pre-conditions)

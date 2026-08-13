@@ -793,6 +793,9 @@ model EmailLog {
   attemptCount          Int         @default(0)
   failureCode           String?
   initiatedByUserId     String?
+  attachmentIncluded    Boolean?
+  tokenCreatedAt        DateTime?
+  tokenExpiresAt        DateTime?
   application           Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
@@ -804,4 +807,32 @@ model EmailLog {
   @@index([offerLetterDocumentId])
   @@index([idempotencyKey])
   @@unique([idempotencyKey, recipientType, recipientRecordId], name: "email_log_offer_letter_recipient_unique")
+}
+
+model OfferLetterAccessToken {
+  id                     String   @id @default(uuid())
+  tokenHash              String   @unique
+  tokenVersion           Int      @default(1)
+  usedForDocumentVersion Int      @default(1)
+  tenantId               String
+  applicationId          String
+  studentId              String
+  documentId             String
+  recipientType          String
+  recipientRecordId      String
+  recipientEmail         String
+  action                 String
+  allowDownload          Boolean  @default(false)
+  emailLogId             String?
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  openedAt               DateTime?
+  lastAccessedAt         DateTime?
+  accessCount            Int      @default(0)
+  createdAt              DateTime @default(now())
+
+  @@index([tenantId, documentId])
+  @@index([applicationId])
+  @@index([recipientType, recipientRecordId])
+  @@index([expiresAt])
 }

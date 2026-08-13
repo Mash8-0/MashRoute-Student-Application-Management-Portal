@@ -40,6 +40,39 @@ ALTER TABLE "EmailLog"
 
 CREATE INDEX IF NOT EXISTS "EmailLog_offerLetterDocumentId_idx" ON "EmailLog"("offerLetterDocumentId");
 CREATE INDEX IF NOT EXISTS "EmailLog_idempotencyKey_idx" ON "EmailLog"("idempotencyKey");
+
+ALTER TABLE "EmailLog" ADD COLUMN IF NOT EXISTS "attachmentIncluded" BOOLEAN;
+ALTER TABLE "EmailLog" ADD COLUMN IF NOT EXISTS "tokenCreatedAt" TIMESTAMP(3);
+ALTER TABLE "EmailLog" ADD COLUMN IF NOT EXISTS "tokenExpiresAt" TIMESTAMP(3);
+
+CREATE TABLE IF NOT EXISTS "OfferLetterAccessToken" (
+  "id" TEXT NOT NULL,
+  "tokenHash" TEXT NOT NULL,
+  "tokenVersion" INTEGER NOT NULL DEFAULT 1,
+  "usedForDocumentVersion" INTEGER NOT NULL DEFAULT 1,
+  "tenantId" TEXT NOT NULL,
+  "applicationId" TEXT NOT NULL,
+  "studentId" TEXT NOT NULL,
+  "documentId" TEXT NOT NULL,
+  "recipientType" TEXT NOT NULL,
+  "recipientRecordId" TEXT NOT NULL,
+  "recipientEmail" TEXT NOT NULL,
+  "action" TEXT NOT NULL,
+  "allowDownload" BOOLEAN NOT NULL DEFAULT false,
+  "emailLogId" TEXT,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "revokedAt" TIMESTAMP(3),
+  "openedAt" TIMESTAMP(3),
+  "lastAccessedAt" TIMESTAMP(3),
+  "accessCount" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "OfferLetterAccessToken_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "OfferLetterAccessToken_tokenHash_key" ON "OfferLetterAccessToken"("tokenHash");
+CREATE INDEX IF NOT EXISTS "OfferLetterAccessToken_tenantId_documentId_idx" ON "OfferLetterAccessToken"("tenantId", "documentId");
+CREATE INDEX IF NOT EXISTS "OfferLetterAccessToken_applicationId_idx" ON "OfferLetterAccessToken"("applicationId");
+CREATE INDEX IF NOT EXISTS "OfferLetterAccessToken_recipientType_recipientRecordId_idx" ON "OfferLetterAccessToken"("recipientType", "recipientRecordId");
+CREATE INDEX IF NOT EXISTS "OfferLetterAccessToken_expiresAt_idx" ON "OfferLetterAccessToken"("expiresAt");
 CREATE INDEX IF NOT EXISTS "EmailLog_applicationId_idx" ON "EmailLog"("applicationId");
 CREATE INDEX IF NOT EXISTS "EmailLog_emailType_idx" ON "EmailLog"("emailType");
 CREATE INDEX IF NOT EXISTS "EmailLog_notificationType_idx" ON "EmailLog"("notificationType");

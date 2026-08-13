@@ -277,7 +277,7 @@ class ApplicationService {
     const { fileUrl, publicId } = await this._uploadNamed(file, `LOE ${ctx.passport} ${ctx.name} ${ctx.univId} ${ctx.date}`, application, ctx);
 
     // Create Document record so it appears in the Documents section
-    const offerLetterDocument = await prisma.document.create({
+    await prisma.document.create({
       data: {
         tenantId, studentId: application.studentId, applicationId: id,
         uploadedById: userId, type: 'OFFER_LETTER', status: 'UPLOADED',
@@ -297,13 +297,6 @@ class ApplicationService {
       include: this._detailInclude(),
     });
     whatsapp.notify('offer_letter_uploaded', updated);
-    await require('../../services/offerLetterIssuedNotification').sendOfferLetterIssued({
-      applicationId: id,
-      tenantId,
-      documentId: offerLetterDocument.id,
-      initiatedByUserId: userId,
-      file: { buffer: offerLetterBuffer, mimetype: file.mimetype, originalname: file.originalname },
-    });
     return updated;
   }
 
@@ -848,7 +841,7 @@ class ApplicationService {
 
   async _readStoredOfferLetter(document) {
     if (document.mimeType !== 'application/pdf') throw { statusCode: 400, message: 'The stored Offer Letter is not a PDF' };
-    const maxBytes = Number(process.env.OFFER_LETTER_EMAIL_MAX_BYTES) || 10 * 1024 * 1024;
+    const maxBytes = Number(process.env.OFFER_LETTER_PREVIEW_MAX_BYTES) || 20 * 1024 * 1024;
     const parsed = new URL(document.fileUrl);
     let buffer;
     if (parsed.pathname.startsWith('/uploads/')) {
@@ -862,11 +855,11 @@ class ApplicationService {
       const response = await fetch(document.fileUrl, { signal: AbortSignal.timeout(15000) }).catch(() => null);
       if (!response?.ok) throw { statusCode: 502, message: 'The Offer Letter file could not be retrieved. Please verify storage and retry.' };
       const contentLength = Number(response.headers.get('content-length'));
-      if (contentLength > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the email attachment size limit' };
+      if (contentLength > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the secure preview size limit' };
       buffer = Buffer.from(await response.arrayBuffer());
     }
     if (!buffer?.length) throw { statusCode: 404, message: 'The Offer Letter file is missing from storage' };
-    if (buffer.length > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the email attachment size limit' };
+    if (buffer.length > maxBytes) throw { statusCode: 400, message: 'The Offer Letter exceeds the secure preview size limit' };
     return buffer;
   }
 

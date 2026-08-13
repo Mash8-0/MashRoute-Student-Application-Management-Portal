@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 router.use('/auth', require('../modules/auth/auth.routes'));
+router.use('/offer-letter', require('../modules/applications/offerLetterPublic.routes'));
 router.use('/register-company', require('../modules/registration/registration.routes'));
 router.use('/register', require('../modules/registration/registration.routes'));
 router.use('/drive-auth', require('./driveAuth.routes'));

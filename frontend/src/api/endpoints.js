@@ -71,6 +71,7 @@ export const applicationAPI = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   retryOfferLetterIssuedEmail: (id) => api.post(`/applications/${id}/offer-letter-email/retry`),
+  previewOfferLetterIssuedEmail: (id, recipientType = 'STUDENT') => api.get(`/applications/${id}/offer-letter-email/preview`, { params: { recipientType } }),
   uploadPaymentProof: (id, formData) => api.post(`/applications/${id}/payment-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
