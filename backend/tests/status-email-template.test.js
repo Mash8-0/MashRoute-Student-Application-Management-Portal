@@ -90,6 +90,7 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   const ui = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/ApplicationDetail.jsx'), 'utf8');
   const studentUi = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/StudentDetail.jsx'), 'utf8');
   const modal = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/payments/TuitionPaymentSetupModal.jsx'), 'utf8');
+  const decisionModal = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/payments/TuitionPaymentDecisionModal.jsx'), 'utf8');
   assert.match(service, /async requestTuitionPayment/);
   assert.match(service, /async openTuitionPayment/);
   assert.match(service, /Only admins can open tuition payment and generate the folio/);
@@ -104,6 +105,9 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   assert.match(studentUi, /TuitionPaymentSetupModal/);
   assert.match(modal, /Open Tuition Fees Payment & Generate Tuition Fees Folio/);
   assert.match(modal, /applicationAPI\.openTuitionPayment/);
+  assert.match(decisionModal, /eVisa Approved Successfully/);
+  assert.match(decisionModal, /Open Tuition Fees Payment/);
+  assert.match(ui, /setShowTuitionPaymentDecision\(true\)/);
   assert.match(modal, /Select Payment Account/);
   assert.match(modal, /Tenant \/ Admin Account/);
   assert.match(service, /paymentDestinationAccount\.findFirst/);

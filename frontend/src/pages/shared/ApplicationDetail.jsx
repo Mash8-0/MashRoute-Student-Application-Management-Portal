@@ -11,6 +11,7 @@ import LOEActions from '../../components/loe/LOEActions';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import ArrivalCard from '../../components/documents/ArrivalCard';
 import EmgsPaymentSetupModal from '../../components/payments/EmgsPaymentSetupModal';
+import TuitionPaymentDecisionModal from '../../components/payments/TuitionPaymentDecisionModal';
 import { STAGES } from '../../lib/documentStages';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/toast';
@@ -441,6 +442,7 @@ export default function ApplicationDetail() {
   const [emailPreview, setEmailPreview] = useState(null);
   const [emailPreviewWidth, setEmailPreviewWidth] = useState('desktop');
   const [showEmgsPaymentSetup, setShowEmgsPaymentSetup] = useState(false);
+  const [showTuitionPaymentDecision, setShowTuitionPaymentDecision] = useState(false);
 
   const isAdmin = ADMIN_ROLES.includes(user?.role);
   const isEmgsStage = application?.invoiceIssuedAt;
@@ -708,6 +710,7 @@ export default function ApplicationDetail() {
       setApplication(res.data.data);
       await fetchApplication(true);
       toast.success('eVisa uploaded');
+      if (ADMIN_ROLES.includes(user?.role)) setShowTuitionPaymentDecision(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
@@ -883,6 +886,13 @@ export default function ApplicationDetail() {
           application={application}
           onClose={() => setShowEmgsPaymentSetup(false)}
           onConfigured={() => fetchApplication(true)}
+        />
+      )}
+      {showTuitionPaymentDecision && application && (
+        <TuitionPaymentDecisionModal
+          application={application}
+          onClose={() => setShowTuitionPaymentDecision(false)}
+          onOpenPayment={openTuitionInPaymentTab}
         />
       )}
       {emailPreview && (
