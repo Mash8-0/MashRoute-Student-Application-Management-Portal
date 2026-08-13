@@ -334,7 +334,17 @@ class ApplicationService {
     return updated;
   }
 
-  // ─── Update status (TENANT_ADMIN only, sequential) ────────────────────────
+  // ─── Update status (admin; forward sequential, backward unrestricted) ────
+
+  isStatusTransitionAllowed(oldStatus, newStatus) {
+    if (newStatus === 'REJECTED' || oldStatus === 'REJECTED') return true;
+    const currentIdx = ORDERED_STATUSES.indexOf(oldStatus);
+    const newIdx = ORDERED_STATUSES.indexOf(newStatus);
+    if (currentIdx < 0 || newIdx < 0) return false;
+    // Admins may return to any earlier workflow stage, but forward movement
+    // must still advance exactly one stage at a time.
+    return newIdx <= currentIdx + 1;
+  }
 
   async updateStatus(id, tenantId, userId, userRole, newStatus, notes, io) {
     if (userRole !== 'TENANT_ADMIN' && userRole !== 'SUPER_ADMIN') {
@@ -355,16 +365,11 @@ class ApplicationService {
       throw { statusCode: 400, message: 'Application must be accepted before status can be updated' };
     }
 
-    // Enforce sequential order (REJECTED is always allowed)
-    if (newStatus !== 'REJECTED') {
-      const currentIdx = ORDERED_STATUSES.indexOf(oldStatus);
-      const newIdx = ORDERED_STATUSES.indexOf(newStatus);
-      if (newIdx !== currentIdx + 1) {
-        throw {
-          statusCode: 400,
-          message: `Invalid transition: "${oldStatus}" → "${newStatus}". Must follow the workflow sequence.`,
-        };
-      }
+    if (!this.isStatusTransitionAllowed(oldStatus, newStatus)) {
+      throw {
+        statusCode: 400,
+        message: `Invalid forward transition: "${oldStatus}" → "${newStatus}". Forward updates must follow the workflow sequence.`,
+      };
     }
 
     const progressPct = STATUS_PROGRESS[newStatus] ?? application.progressPct;
@@ -374,6 +379,7 @@ class ApplicationService {
       data: {
         status: newStatus, progressPct,
         ...(newStatus === 'COMPLETED' && { completedAt: new Date() }),
+        ...(oldStatus === 'COMPLETED' && newStatus !== 'COMPLETED' && { completedAt: null }),
       },
       include: this._baseInclude(),
     });
