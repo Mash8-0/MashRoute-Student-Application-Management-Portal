@@ -5,12 +5,14 @@ const EVENT_DEFS = {
   payment_proof_uploaded: {
     title: 'Payment Proof Uploaded',
     subject: 'MashRoute: Payment Proof Uploaded',
+    status: 'PAYMENT PROOF UPLOADED',
     roles: ['STUDENT', 'ASSIGNED', 'TENANT_ADMIN'],
     message: 'Payment proof has been uploaded and is ready for admin review.',
   },
   payment_verified: {
     title: 'Payment Verified',
     subject: 'MashRoute: Payment Verified',
+    status: 'PAYMENT VERIFIED',
     roles: ['STUDENT', 'ASSIGNED'],
     message: 'The payment proof has been verified successfully.',
   },
@@ -203,7 +205,10 @@ async function notifyEvent(event, application, extra = {}) {
 
   const recipients = await resolveRecipients(app, roles);
   const title = extra.title || def.title;
-  const status = extra.status || app.status;
+  // Event notifications should describe the event that just happened rather
+  // than a broader application workflow stage that may intentionally remain
+  // unchanged (for example, payment proof upload after offer-letter issuance).
+  const status = extra.status || def.status || app.status;
   const message = extra.message || def.message;
   const dashboardUrl = extra.dashboardUrl || getDashboardUrl(app.id);
   const payload = {

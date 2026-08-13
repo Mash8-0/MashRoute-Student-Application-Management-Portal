@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { createApplicationNotificationTemplate, createTextNotification } = require('../src/services/emailNotify');
 
 const payload = {
@@ -37,4 +39,11 @@ test('status email escapes dynamic values and keeps a complete plain-text fallba
   assert.match(text, /Student: Ahmad Rahman/);
   assert.match(text, /Status: AWAITING OFFER LETTER/);
   assert.match(text, /Dashboard: https:\/\/mashroute\.com\/applications\/app-1/);
+});
+
+test('payment notifications use the event status instead of stale workflow status', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/services/emailNotify.js'), 'utf8');
+  assert.match(source, /payment_proof_uploaded:[\s\S]*?status: 'PAYMENT PROOF UPLOADED'/);
+  assert.match(source, /payment_verified:[\s\S]*?status: 'PAYMENT VERIFIED'/);
+  assert.match(source, /extra\.status \|\| def\.status \|\| app\.status/);
 });
