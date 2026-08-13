@@ -751,6 +751,26 @@ export default function ApplicationDetail() {
     }
   };
 
+  const handleRequestTuitionPayment = async () => {
+    const note = window.prompt('Optional note for the admin:', '') ?? null;
+    if (note === null) return;
+    setProcessing(true);
+    try { await applicationAPI.requestTuitionPayment(id, note); await fetchApplication(true); toast.success('Tuition payment request sent to admin'); }
+    catch (err) { toast.error(err.response?.data?.message || 'Failed to request tuition payment'); }
+    finally { setProcessing(false); }
+  };
+
+  const handleOpenTuitionPayment = async () => {
+    const amount = window.prompt('Tuition fee amount (MYR):');
+    if (amount === null) return;
+    const dueDate = window.prompt('Payment due date (YYYY-MM-DD):', new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
+    if (dueDate === null) return;
+    setProcessing(true);
+    try { await applicationAPI.openTuitionPayment(id, { amount, currency: 'MYR', dueDate, description: 'Tuition Fees' }); await fetchApplication(true); toast.success('Tuition payment opened and folio emailed'); }
+    catch (err) { toast.error(err.response?.data?.message || 'Failed to open tuition payment'); }
+    finally { setProcessing(false); }
+  };
+
   const handleUploadFlightTicket = async (file) => {
     if (!file) { toast.error('Please select a file'); return; }
     setProcessing(true);
@@ -832,12 +852,15 @@ export default function ApplicationDetail() {
   const showEvisa = postIdx >= postEvalIndex('EVISA_APPROVED') || !!app.evisaUrl;
   // Show arrival/tuition from "Under Arrival" onward (or data already exists).
   const showArrival =
-    postIdx >= postEvalIndex('UNDER_ARRIVAL') || !!app.flightTicketUrl || !!app.tuitionProofUrl || !!app.arrivalDate;
+    postIdx >= postEvalIndex('UNDER_ARRIVAL') || !!app.evisaUrl || !!app.flightTicketUrl || !!app.tuitionProofUrl || !!app.arrivalDate;
   // Derived tuition verification state (falls back for pre-existing rows)
   const tuitionStatus =
     app.tuitionVerificationStatus && app.tuitionVerificationStatus !== 'NONE'
       ? app.tuitionVerificationStatus
       : app.tuitionVerifiedAt ? 'VERIFIED' : app.tuitionProofUrl ? 'PENDING' : 'NONE';
+  const tuitionPayment = app.payments?.find((payment) => payment.paymentType === 'TUITION');
+  const tuitionInvoice = tuitionPayment?.Invoice?.[0];
+  const tuitionRequest = tuitionPayment?.InvoiceRequest?.find((request) => request.requestStatus === 'REQUESTED');
 
   // Logical gating: which stage can be reached next, and what (if anything) blocks it.
   const nextPostEvalStage = POST_EVAL_STAGES[postIdx + 1] || null;
@@ -1460,6 +1483,24 @@ export default function ApplicationDetail() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
             <SectionCard title="Tuition Payment" icon={Receipt}>
+              <div className="mb-4 space-y-3">
+                {tuitionInvoice?.pdfUrl ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                    <div><p className="text-sm font-semibold text-emerald-800">Tuition payment open</p><p className="text-xs text-emerald-700">{tuitionInvoice.currency} {Number(tuitionInvoice.grandTotal || tuitionInvoice.amount).toLocaleString()} · Due {formatDate(tuitionInvoice.dueDate)}</p></div>
+                    <a href={tuitionInvoice.pdfUrl} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline"><Download className="h-3.5 w-3.5" /> View Folio PDF</Button></a>
+                  </div>
+                ) : isAdmin ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
+                    <div><p className="text-sm font-semibold">{tuitionRequest ? 'Tuition payment requested' : 'Open tuition payment'}</p><p className="text-xs text-muted-foreground">Generate the payment folio after confirming the fee and due date.</p></div>
+                    <Button size="sm" onClick={handleOpenTuitionPayment} disabled={processing || !app.evisaUrl}>{processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />} Generate Tuition Folio</Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div><p className="text-sm font-semibold text-amber-800">{tuitionRequest ? 'Request awaiting admin' : 'Tuition payment is not open'}</p><p className="text-xs text-amber-700">Ask an admin to configure the tuition fee and issue the folio.</p></div>
+                    {!tuitionRequest && <Button size="sm" variant="outline" onClick={handleRequestTuitionPayment} disabled={processing || !app.evisaUrl}>Request Tuition Payment</Button>}
+                  </div>
+                )}
+              </div>
               {app.tuitionProofUrl ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-4">
@@ -1544,7 +1585,7 @@ export default function ApplicationDetail() {
                     </div>
                   )}
                 </div>
-              ) : canUpload ? (
+              ) : canUpload && tuitionInvoice?.pdfUrl ? (
                 <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
                   <Receipt className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">No tuition payment proof uploaded yet</p>

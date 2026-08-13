@@ -122,6 +122,8 @@ export const applicationAPI = {
   uploadTuitionProof: (id, formData) => api.post(`/applications/${id}/tuition-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  requestTuitionPayment: (id, note) => api.post(`/applications/${id}/tuition-request`, { note }),
+  openTuitionPayment: (id, data) => api.post(`/applications/${id}/open-tuition-payment`, data),
   // action: 'verify' | 'reject'; remarks optional (required-ish for reject)
   verifyTuition: (id, { action = 'verify', remarks } = {}) =>
     api.post(`/applications/${id}/verify-tuition`, { action, remarks }),

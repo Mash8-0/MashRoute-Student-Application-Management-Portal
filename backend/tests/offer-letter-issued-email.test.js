@@ -218,12 +218,16 @@ test('temporary failures are sanitized, logged, and safely retryable', async () 
   assert.equal(db.logs[0].status, 'SENT');
 });
 
-test('Registered Agent remains blocked from Student, Application, and Document APIs', () => {
-  for (const route of ['students/student.routes.js', 'applications/application.routes.js', 'documents/document.routes.js']) {
+test('Registered Agent remains blocked except for assigned tuition-payment requests', () => {
+  for (const route of ['students/student.routes.js', 'documents/document.routes.js']) {
     const source = fs.readFileSync(path.join(__dirname, `../src/modules/${route}`), 'utf8');
     assert.match(source, /router\.use\(authenticate, tenantContext, authorize\('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'\)\)/);
     assert.doesNotMatch(source, /authorize\([^)]*REGISTERED_AGENT/);
   }
+  const applicationRoutes = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.routes.js'), 'utf8');
+  assert.match(applicationRoutes, /router\.use\(authenticate, tenantContext\)/);
+  assert.match(applicationRoutes, /tuition-request', authorize\('STAFF', 'REGISTERED_AGENT'\)/);
+  assert.match(applicationRoutes, /router\.use\(authorize\('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'\)\)/);
 });
 
 test('upload stores document without sending; protected send is a separate confirmation', () => {

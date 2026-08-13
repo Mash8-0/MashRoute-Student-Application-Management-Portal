@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const prisma = require('../../config/database');
 const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 const { generateReferenceNo } = require('../../utils/generateReference');
@@ -891,24 +892,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('evisa_approved', updated);
-    if (updated.emgsApprovalUrl && updated.evalApprovalUrl && updated.evisaUrl) {
-      try {
-        const attachments = await Promise.all([
-          readWorkflowEmailAttachment(updated.evisaUrl, 'eVisa.pdf'),
-          readWorkflowEmailAttachment(updated.emgsApprovalUrl, 'EMGS Approval.pdf'),
-          readWorkflowEmailAttachment(updated.evalApprovalUrl, 'eVAL Approval.pdf'),
-        ]);
-        const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.content.length, 0);
-        if (totalBytes > EVISA_ATTACHMENTS_TOTAL_MAX_BYTES) throw new Error('Combined eVisa approval attachments exceed the email size limit');
-        emailNotify.notify('evisa_approved', updated, {
-          subject: 'MashRoute: eVisa Approved — Approval Documents Attached',
-          message: 'The eVisa has been approved and uploaded. The eVisa, EMGS Approval, and eVAL Approval documents are attached.',
-          attachments,
-        });
-      } catch (error) {
-        console.error('[email] eVisa approval notification skipped:', error?.message || error);
-      }
-    }
     return updated;
   }
 
@@ -949,6 +932,8 @@ class ApplicationService {
 
   async uploadTuitionProof(id, tenantId, userId, file) {
     const application = await this._assertExists(id, tenantId);
+    const tuitionInvoice = await prisma.invoice.findFirst({ where: { tenantId, applicationId: id, invoiceType: 'TUITION', status: { in: ['ISSUED', 'UNPAID', 'DUE'] }, pdfUrl: { not: null } } });
+    if (!tuitionInvoice) throw { statusCode: 400, message: 'Admin must generate the tuition folio before payment proof can be uploaded.' };
 
     // Drive: Tuition Payment {Passport} {Name} {Date}
     const ctx = await this._namingContext(application);
@@ -967,6 +952,81 @@ class ApplicationService {
       },
       include: this._baseInclude(),
     });
+  }
+
+  async requestTuitionPayment(id, tenantId, userId, userRole, note) {
+    if (['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) throw { statusCode: 400, message: 'Admins can open tuition payment directly.' };
+    const application = await this._assertExists(id, tenantId);
+    if (userRole === 'REGISTERED_AGENT' && application.agentId !== userId) throw { statusCode: 403, message: 'Agents can request tuition payment only for their assigned application.' };
+    if (!application.evisaUrl) throw { statusCode: 400, message: 'Upload and approve the eVisa before requesting tuition payment.' };
+    return prisma.$transaction(async (tx) => {
+      let payment = await tx.payment.findFirst({ where: { tenantId, applicationId: id, paymentType: 'TUITION' }, orderBy: { createdAt: 'desc' } });
+      if (!payment) payment = await tx.payment.create({ data: { tenantId, studentId: application.studentId, applicationId: id, amount: 0, currency: 'MYR', status: 'PENDING', paymentType: 'TUITION', description: 'Tuition Fees', submittedByUserId: userId, submittedByRole: userRole } });
+      const existing = await tx.invoiceRequest.findFirst({ where: { tenantId, applicationId: id, paymentId: payment.id, requestStatus: 'REQUESTED' } });
+      if (existing) return existing;
+      return tx.invoiceRequest.create({ data: { id: crypto.randomUUID(), tenantId, applicationId: id, studentId: application.studentId, paymentId: payment.id, requestedBy: userId, note: note || null, updatedAt: new Date() } });
+    });
+  }
+
+  async openTuitionPayment(id, tenantId, userId, userRole, data) {
+    if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) throw { statusCode: 403, message: 'Only admins can open tuition payment and generate the folio.' };
+    const application = await prisma.application.findFirst({ where: { id, tenantId, deletedAt: null }, include: { student: true, university: true, tenant: true } });
+    if (!application) throw { statusCode: 404, message: 'Application not found' };
+    if (!application.evisaUrl || !application.emgsApprovalUrl || !application.evalApprovalUrl) throw { statusCode: 400, message: 'eVisa, EMGS Approval, and eVAL Approval must all be uploaded first.' };
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw { statusCode: 400, message: 'A valid tuition amount is required.' };
+    const dueDate = new Date(data.dueDate);
+    if (Number.isNaN(dueDate.getTime())) throw { statusCode: 400, message: 'A valid tuition due date is required.' };
+    const currency = String(data.currency || 'MYR').toUpperCase();
+
+    const result = await prisma.$transaction(async (tx) => {
+      let payment = await tx.payment.findFirst({ where: { tenantId, applicationId: id, paymentType: 'TUITION' }, orderBy: { createdAt: 'desc' } });
+      if (payment) payment = await tx.payment.update({ where: { id: payment.id }, data: { amount, currency, dueDate, description: 'Tuition Fees', notes: data.notes || null } });
+      else payment = await tx.payment.create({ data: { tenantId, studentId: application.studentId, applicationId: id, amount, currency, dueDate, status: 'PENDING', paymentType: 'TUITION', description: 'Tuition Fees', notes: data.notes || null, submittedByUserId: userId, submittedByRole: userRole } });
+      await tx.invoice.updateMany({ where: { tenantId, applicationId: id, invoiceType: 'TUITION', status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledById: userId } });
+      const invoiceId = crypto.randomUUID();
+      const invoiceNo = `TUI-${new Date().getUTCFullYear()}-${invoiceId.slice(0, 8).toUpperCase()}`;
+      const invoice = await tx.invoice.create({ data: {
+        id: invoiceId, tenantId, applicationId: id, studentId: application.studentId, paymentId: payment.id,
+        invoiceNo, displayInvoiceNo: invoiceNo, invoiceType: 'TUITION', amount, subtotal: amount, grandTotal: amount,
+        currency, status: 'DRAFT', dueDate, updatedAt: new Date(), createdById: userId,
+        studentName: application.student.fullName, passportNo: application.student.passportNumber,
+        studentEmail: application.student.email, studentPhone: application.student.phone,
+        universityName: application.university?.name, programmeName: application.program, intake: application.intake,
+        referenceNo: application.referenceNo, tenantName: application.tenant.name, tenantEmail: application.tenant.email,
+        tenantPhone: application.tenant.phone, tenantAddress: application.tenant.address,
+        notes: data.notes || 'Please pay the tuition fees by the due date and upload payment proof in MashRoute.',
+      } });
+      await tx.invoiceItem.create({ data: { id: crypto.randomUUID(), invoiceId, description: data.description || 'Tuition Fees', quantity: 1, unitPrice: amount, amount, updatedAt: new Date() } });
+      await tx.invoiceRequest.updateMany({ where: { tenantId, applicationId: id, requestStatus: 'REQUESTED' }, data: { requestStatus: 'COMPLETED', reviewedBy: userId, reviewedAt: new Date(), updatedAt: new Date() } });
+      return { payment, invoice };
+    });
+
+    const { generateInvoicePdf } = require('../../services/invoicePdf');
+    const invoiceWithItems = { ...result.invoice, items: [{ description: data.description || 'Tuition Fees', quantity: 1, unitPrice: amount, amount }] };
+    const pdfPath = await generateInvoicePdf({ invoice: invoiceWithItems, payment: result.payment, application, tenant: application.tenant });
+    const ctx = await this._namingContext(application);
+    const localInvoiceDir = path.resolve(__dirname, '../../../uploads/temp');
+    await fs.mkdir(localInvoiceDir, { recursive: true });
+    const localInvoicePath = path.join(localInvoiceDir, `${result.invoice.invoiceNo}.pdf`);
+    await fs.copyFile(pdfPath, localInvoicePath);
+    await fs.unlink(pdfPath).catch(() => {});
+    const stored = await this._uploadNamed({ path: localInvoicePath, originalname: `${result.invoice.invoiceNo}.pdf`, mimetype: 'application/pdf', _keepOnDisk: false }, `Tuition Folio ${ctx.passport} ${ctx.name}`, application, ctx);
+    const invoice = await prisma.invoice.update({ where: { id: result.invoice.id }, data: { status: 'ISSUED', pdfUrl: stored.fileUrl, issuedAt: new Date(), issuedById: userId, generatedByUserId: userId } });
+    const updated = await prisma.application.update({ where: { id }, data: { tuitionInvoiceIssuedAt: new Date(), tuitionInvoiceIssuedById: userId }, include: this._detailInclude() });
+
+    try {
+      const attachments = await Promise.all([
+        readWorkflowEmailAttachment(updated.evisaUrl, 'eVisa.pdf'),
+        readWorkflowEmailAttachment(updated.emgsApprovalUrl, 'EMGS Approval.pdf'),
+        readWorkflowEmailAttachment(updated.evalApprovalUrl, 'eVAL Approval.pdf'),
+        readWorkflowEmailAttachment(invoice.pdfUrl, 'Tuition Fees Folio.pdf'),
+      ]);
+      const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.content.length, 0);
+      if (totalBytes > EVISA_ATTACHMENTS_TOTAL_MAX_BYTES) throw new Error('Combined approval and tuition folio attachments exceed the email size limit');
+      emailNotify.notify('evisa_approved', updated, { title: 'eVisa Approved — Tuition Payment Opened', subject: 'MashRoute: eVisa Approved and Tuition Fees Folio', status: 'TUITION PAYMENT OPEN', message: 'The eVisa is approved and tuition payment is now open. The eVisa, EMGS Approval, eVAL Approval, and tuition fees folio are attached.', attachments });
+    } catch (error) { console.error('[email] tuition folio notification skipped:', error?.message || error); }
+    return { application: updated, invoice };
   }
 
   // ─── Verify / Reject Tuition (TENANT_ADMIN only) ──────────────────────────
@@ -1269,7 +1329,7 @@ class ApplicationService {
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
       },
-      payments: { orderBy: { createdAt: 'desc' } },
+      payments: { orderBy: { createdAt: 'desc' }, include: { Invoice: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' } }, InvoiceRequest: { orderBy: { createdAt: 'desc' } } } },
       statusHistory: {
         orderBy: { createdAt: 'desc' },
         include: { changedBy: { select: { firstName: true, lastName: true } } },

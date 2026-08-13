@@ -69,16 +69,36 @@ test('EMGS progress emails are restricted to the requested milestone stages', ()
   assert.match(source, /subject: `MashRoute: EMGS Progress Updated to \$\{pct\}%`/);
 });
 
-test('approval uploads send one eVisa email with all three approval documents', () => {
+test('tuition folio generation sends one email with approvals, eVisa, and folio', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
   assert.doesNotMatch(source, /emailNotify\.notify\('emgs_approved'/);
   assert.doesNotMatch(source, /emailNotify\.notify\('eval_approved'/);
+  const evisaMethod = source.match(/async uploadEvisa[\s\S]*?async uploadEmgsApproval/)?.[0] || '';
+  assert.doesNotMatch(evisaMethod, /emailNotify\.notify/);
   assert.match(source, /readWorkflowEmailAttachment\(updated\.evisaUrl, 'eVisa\.pdf'\)/);
   assert.match(source, /readWorkflowEmailAttachment\(updated\.emgsApprovalUrl, 'EMGS Approval\.pdf'\)/);
   assert.match(source, /readWorkflowEmailAttachment\(updated\.evalApprovalUrl, 'eVAL Approval\.pdf'\)/);
+  assert.match(source, /readWorkflowEmailAttachment\(invoice\.pdfUrl, 'Tuition Fees Folio\.pdf'\)/);
   assert.match(source, /emailNotify\.notify\('evisa_approved', updated, \{/);
-  assert.match(source, /attachments,/);
+  assert.match(source, /attachments \}\);/);
   assert.match(source, /EVISA_ATTACHMENTS_TOTAL_MAX_BYTES/);
+});
+
+test('tuition workflow supports staff request and admin-only folio generation', () => {
+  const service = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
+  const routes = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.routes.js'), 'utf8');
+  const ui = fs.readFileSync(path.join(__dirname, '../../frontend/src/pages/shared/ApplicationDetail.jsx'), 'utf8');
+  assert.match(service, /async requestTuitionPayment/);
+  assert.match(service, /async openTuitionPayment/);
+  assert.match(service, /Only admins can open tuition payment and generate the folio/);
+  assert.match(service, /generateInvoicePdf/);
+  assert.match(service, /uploads\/temp/);
+  assert.match(routes, /open-tuition-payment', authorize\('TENANT_ADMIN', 'SUPER_ADMIN'\)/);
+  assert.match(routes, /tuition-request', authorize\('STAFF', 'REGISTERED_AGENT'\)/);
+  assert.match(service, /application\.agentId !== userId/);
+  assert.match(ui, /Request Tuition Payment/);
+  assert.match(ui, /Generate Tuition Folio/);
+  assert.match(ui, /\|\| !!app\.evisaUrl \|\|/);
 });
 
 test('admins can delete EMGS approval, eVAL approval, and eVisa workflow files', () => {

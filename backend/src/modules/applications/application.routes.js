@@ -8,7 +8,9 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
 const { logActivity } = require('../../middleware/activityLog.middleware');
 
-router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
+router.use(authenticate, tenantContext);
+router.post('/:id/tuition-request', authorize('STAFF', 'REGISTERED_AGENT'), logActivity('REQUEST_TUITION_PAYMENT', 'Application'), controller.requestTuitionPayment);
+router.use(authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 // ─── Multer (for offer letter + payment proof uploads) ────────────────────────
 
@@ -100,6 +102,7 @@ router.post('/:id/eval-approval', upload.single('file'), logActivity('UPLOAD_EVA
 router.patch('/:id/arrival', upload.single('file'), logActivity('UPDATE', 'Application'), controller.updateArrival);
 
 // Tuition payment proof: all authenticated users
+router.post('/:id/open-tuition-payment', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('OPEN_TUITION_PAYMENT', 'Application'), controller.openTuitionPayment);
 router.post('/:id/tuition-proof', upload.single('file'), logActivity('UPLOAD_TUITION_PROOF', 'Application'), controller.uploadTuitionProof);
 
 // Verify tuition payment: TENANT_ADMIN only (enforced in service)
