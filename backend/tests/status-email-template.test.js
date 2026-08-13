@@ -47,3 +47,26 @@ test('payment notifications use the event status instead of stale workflow statu
   assert.match(source, /payment_verified:[\s\S]*?status: 'PAYMENT VERIFIED'/);
   assert.match(source, /extra\.status \|\| def\.status \|\| app\.status/);
 });
+
+test('EMGS progress emails show the exact milestone instead of generic EMGS processing', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
+  const expectedMilestones = [
+    [0, 'Application Created'],
+    [5, 'Pending Submission of Payment Proof'],
+    [10, 'Documents in Process'],
+    [15, 'Documents Processing in EMGS'],
+    [32, 'Documents Processing in EMGS'],
+    [35, 'EMGS Approved'],
+    [70, 'eVAL Approved'],
+    [80, 'Medical Passed'],
+    [90, 'Endorsement in Progress'],
+    [100, 'Application Successful'],
+  ];
+
+  for (const [percentage, milestone] of expectedMilestones) {
+    assert.match(source, new RegExp(`${percentage}: '${milestone}'`));
+  }
+  assert.match(source, /status: emgsMilestone/);
+  assert.match(source, /title: 'EMGS Progress Updated'/);
+  assert.match(source, /subject: `MashRoute: EMGS Progress Updated to \$\{pct\}%`/);
+});

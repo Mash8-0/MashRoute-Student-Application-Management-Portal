@@ -36,6 +36,18 @@ const UPDATABLE_STATUSES = [
 // EMGS percentage milestones. The post-eVAL stages (Awaiting eVisa → eVisa
 // Approved → Under Arrival) are NOT percentages — they live on `postEvalStatus`.
 const EMGS_STEPS = [0, 5, 10, 15, 32, 35, 70, 80, 90, 100];
+const EMGS_PROGRESS_LABELS = {
+  0: 'Application Created',
+  5: 'Pending Submission of Payment Proof',
+  10: 'Documents in Process',
+  15: 'Documents Processing in EMGS',
+  32: 'Documents Processing in EMGS',
+  35: 'EMGS Approved',
+  70: 'eVAL Approved',
+  80: 'Medical Passed',
+  90: 'Endorsement in Progress',
+  100: 'Application Successful',
+};
 
 // Post-eVAL workflow states (separate from the EMGS percentage).
 const POST_EVAL_STATUSES = ['AWAITING_EVISA', 'EVISA_APPROVED', 'UNDER_ARRIVAL', 'ARRIVAL_COMPLETED'];
@@ -712,8 +724,12 @@ class ApplicationService {
       });
     }
 
+    const emgsMilestone = `${pct}% — ${EMGS_PROGRESS_LABELS[pct]}`;
     emailNotify.notify('application_status_updated', updated, {
-      status: newStatus.replace(/_/g, ' '),
+      title: 'EMGS Progress Updated',
+      subject: `MashRoute: EMGS Progress Updated to ${pct}%`,
+      status: emgsMilestone,
+      message: `Your EMGS application progress is now ${emgsMilestone}.\nYou can review the latest details below.`,
       notifyTenantAdmin: newStatus === 'COMPLETED',
     });
     if (newStatus === 'COMPLETED') {
