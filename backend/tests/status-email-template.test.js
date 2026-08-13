@@ -68,3 +68,15 @@ test('EMGS progress emails are restricted to the requested milestone stages', ()
   assert.match(source, /title: 'EMGS Progress Updated'/);
   assert.match(source, /subject: `MashRoute: EMGS Progress Updated to \$\{pct\}%`/);
 });
+
+test('approval uploads send one eVisa email with all three approval documents', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/modules/applications/application.service.js'), 'utf8');
+  assert.doesNotMatch(source, /emailNotify\.notify\('emgs_approved'/);
+  assert.doesNotMatch(source, /emailNotify\.notify\('eval_approved'/);
+  assert.match(source, /readWorkflowEmailAttachment\(updated\.evisaUrl, 'eVisa\.pdf'\)/);
+  assert.match(source, /readWorkflowEmailAttachment\(updated\.emgsApprovalUrl, 'EMGS Approval\.pdf'\)/);
+  assert.match(source, /readWorkflowEmailAttachment\(updated\.evalApprovalUrl, 'eVAL Approval\.pdf'\)/);
+  assert.match(source, /emailNotify\.notify\('evisa_approved', updated, \{/);
+  assert.match(source, /attachments,/);
+  assert.match(source, /EVISA_ATTACHMENTS_TOTAL_MAX_BYTES/);
+});

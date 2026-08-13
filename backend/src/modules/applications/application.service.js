@@ -54,6 +54,30 @@ const EMGS_EMAIL_MILESTONES = new Set([0, 35, 70, 80, 90, 100]);
 const POST_EVAL_STATUSES = ['AWAITING_EVISA', 'EVISA_APPROVED', 'UNDER_ARRIVAL', 'ARRIVAL_COMPLETED'];
 const ENGLISH_PROFICIENCY_OPTIONS = ['IELTS', 'PTE', 'MOI', 'NONE'];
 const INTAKE_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const EVISA_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024;
+const EVISA_ATTACHMENTS_TOTAL_MAX_BYTES = 30 * 1024 * 1024;
+const WORKFLOW_ATTACHMENT_HOSTS = new Set([
+  'drive.google.com', 'drive.usercontent.google.com', 'www.googleapis.com',
+  'lh3.googleusercontent.com', 'mashroute.com', 'www.mashroute.com',
+]);
+
+function isApprovedWorkflowAttachmentHost(hostname) {
+  return WORKFLOW_ATTACHMENT_HOSTS.has(hostname) || hostname.endsWith('.googleusercontent.com');
+}
+
+async function readWorkflowEmailAttachment(fileUrl, filename) {
+  const url = new URL(fileUrl);
+  if (url.protocol !== 'https:' || !isApprovedWorkflowAttachmentHost(url.hostname)) {
+    throw new Error(`${filename} uses an unapproved storage location`);
+  }
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok || !response.body) throw new Error(`${filename} could not be retrieved from storage`);
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (contentLength > EVISA_ATTACHMENT_MAX_BYTES) throw new Error(`${filename} exceeds the email attachment size limit`);
+  const content = Buffer.from(await response.arrayBuffer());
+  if (!content.length || content.length > EVISA_ATTACHMENT_MAX_BYTES) throw new Error(`${filename} is empty or exceeds the email attachment size limit`);
+  return { filename, content, contentType: response.headers.get('content-type') || 'application/pdf' };
+}
 
 async function resolveApplicationIntake(tenantId, intakeId, { requireAvailable = false } = {}) {
   if (!intakeId) return null;
@@ -845,7 +869,24 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('evisa_approved', updated);
-    emailNotify.notify('evisa_approved', updated);
+    if (updated.emgsApprovalUrl && updated.evalApprovalUrl && updated.evisaUrl) {
+      try {
+        const attachments = await Promise.all([
+          readWorkflowEmailAttachment(updated.evisaUrl, 'eVisa.pdf'),
+          readWorkflowEmailAttachment(updated.emgsApprovalUrl, 'EMGS Approval.pdf'),
+          readWorkflowEmailAttachment(updated.evalApprovalUrl, 'eVAL Approval.pdf'),
+        ]);
+        const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.content.length, 0);
+        if (totalBytes > EVISA_ATTACHMENTS_TOTAL_MAX_BYTES) throw new Error('Combined eVisa approval attachments exceed the email size limit');
+        emailNotify.notify('evisa_approved', updated, {
+          subject: 'MashRoute: eVisa Approved — Approval Documents Attached',
+          message: 'The eVisa has been approved and uploaded. The eVisa, EMGS Approval, and eVAL Approval documents are attached.',
+          attachments,
+        });
+      } catch (error) {
+        console.error('[email] eVisa approval notification skipped:', error?.message || error);
+      }
+    }
     return updated;
   }
 
@@ -862,7 +903,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('emgs_approved', updated);
-    emailNotify.notify('emgs_approved', updated);
     return updated;
   }
 
@@ -879,7 +919,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('eval_approved', updated);
-    emailNotify.notify('eval_approved', updated);
     return updated;
   }
 
