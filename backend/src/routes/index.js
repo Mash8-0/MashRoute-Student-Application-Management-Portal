@@ -14,6 +14,7 @@ router.use('/applications/:applicationId/loe', require('../modules/loe/loe.route
 router.use('/documents', require('../modules/documents/document.routes'));
 router.use('/payments', require('../modules/payments/payment.routes'));
 router.use('/emgs-payments', require('../modules/payments/emgsPayment.routes'));
+router.use('/student-payments', require('../modules/payments/studentPayment.routes'));
 router.use('/extraction', require('../modules/ai-extraction/extraction.routes'));
 router.use('/universities', require('../modules/universities/university.routes'));
 router.use('/whatsapp', require('../modules/whatsapp/whatsapp.routes'));

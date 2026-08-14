@@ -717,16 +717,16 @@ model EmgsPaymentReceipt {
 }
 
 model EmgsPaymentReversal {
-  id                    String   @id @default(uuid())
-  tenantId              String
-  applicationId         String
-  transactionId         String
-  amount                Decimal  @db.Decimal(12, 2)
-  currency              String
-  reason                String
-  status                String   @default("COMPLETED")
-  createdByUserId       String
-  createdAt             DateTime @default(now())
+  id              String   @id @default(uuid())
+  tenantId        String
+  applicationId   String
+  transactionId   String
+  amount          Decimal  @db.Decimal(12, 2)
+  currency        String
+  reason          String
+  status          String   @default("COMPLETED")
+  createdByUserId String
+  createdAt       DateTime @default(now())
 
   @@index([tenantId, applicationId])
   @@index([tenantId, transactionId])
@@ -762,6 +762,169 @@ model FinancialAuditLog {
 
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, action, createdAt])
+}
+
+model PaymentFeeSection {
+  id                   String                      @id @default(uuid())
+  tenantId             String
+  studentId            String
+  applicationId        String
+  sectionType          PaymentFeeSectionType
+  category             String?
+  customLabel          String?
+  description          String?
+  currency             String
+  dueDate              DateTime
+  destinationType      PaymentDestinationType
+  destinationAccountId String
+  destinationSnapshot  Json
+  allowPartialPayment  Boolean                     @default(false)
+  minimumPartialAmount Decimal?                    @db.Decimal(12, 2)
+  studentNote          String?
+  internalNote         String?
+  status               FeeSectionStatus            @default(PAYMENT_PENDING)
+  activeSectionKey     String?                     @unique
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  cancelledAt          DateTime?
+  lines                PaymentFeeLine[]
+  transactions         PaymentSectionTransaction[]
+
+  @@index([tenantId, applicationId, sectionType, status])
+  @@index([tenantId, studentId])
+  @@index([destinationAccountId])
+}
+
+model PaymentFeeLine {
+  id                  String                     @id @default(uuid())
+  tenantId            String
+  sectionId           String
+  feeCode             String
+  description         String
+  baseAmount          Decimal                    @db.Decimal(12, 2)
+  sstTreatment        SstTreatment               @default(NO_SST)
+  sstRate             Decimal                    @default(0) @db.Decimal(5, 2)
+  preTaxAmount        Decimal                    @db.Decimal(12, 2)
+  sstAmount           Decimal                    @db.Decimal(12, 2)
+  finalAmount         Decimal                    @db.Decimal(12, 2)
+  calculationSnapshot Json
+  notes               String?
+  sortOrder           Int                        @default(0)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  section             PaymentFeeSection          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  allocations         PaymentSectionAllocation[]
+
+  @@unique([sectionId, feeCode])
+  @@index([tenantId, sectionId])
+}
+
+model PaymentSectionTransaction {
+  id                   String                     @id @default(uuid())
+  tenantId             String
+  studentId            String
+  applicationId        String
+  sectionId            String
+  amount               Decimal                    @db.Decimal(12, 2)
+  currency             String
+  paymentDate          DateTime
+  paymentMethod        String
+  paidBy               String
+  destinationType      PaymentDestinationType
+  destinationAccountId String
+  destinationSnapshot  Json
+  transactionReference String?
+  note                 String?
+  proofFileUrl         String?
+  proofHash            String?
+  status               PaymentTransactionStatus   @default(PROOF_UPLOADED)
+  submittedByUserId    String
+  verifiedByUserId     String?
+  verifiedAt           DateTime?
+  rejectedByUserId     String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  section              PaymentFeeSection          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  allocations          PaymentSectionAllocation[]
+  receipt              PaymentSectionReceipt?
+
+  @@index([tenantId, applicationId, status])
+  @@index([tenantId, transactionReference])
+  @@index([tenantId, proofHash])
+  @@index([sectionId])
+}
+
+model PaymentSectionAllocation {
+  id            String                    @id @default(uuid())
+  tenantId      String
+  transactionId String
+  feeLineId     String
+  amount        Decimal                   @db.Decimal(12, 2)
+  createdAt     DateTime                  @default(now())
+  transaction   PaymentSectionTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  feeLine       PaymentFeeLine            @relation(fields: [feeLineId], references: [id])
+
+  @@unique([transactionId, feeLineId])
+  @@index([tenantId, feeLineId])
+}
+
+model PaymentSectionReceipt {
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  studentId           String
+  applicationId       String
+  sectionId           String
+  transactionId       String                    @unique
+  receiptNo           String
+  amount              Decimal                   @db.Decimal(12, 2)
+  currency            String
+  destinationType     PaymentDestinationType
+  destinationSnapshot Json
+  remainingBalance    Decimal                   @db.Decimal(12, 2)
+  status              ReceiptStatus             @default(ISSUED)
+  verifiedByUserId    String
+  verifiedAt          DateTime
+  documentUrl         String?
+  createdAt           DateTime                  @default(now())
+  transaction         PaymentSectionTransaction @relation(fields: [transactionId], references: [id])
+
+  @@unique([tenantId, receiptNo])
+  @@index([tenantId, applicationId])
+  @@index([sectionId])
+}
+
+model StudentPaymentCredit {
+  id            String   @id @default(uuid())
+  tenantId      String
+  studentId     String
+  applicationId String
+  sectionId     String
+  transactionId String
+  amount        Decimal  @db.Decimal(12, 2)
+  currency      String
+  status        String   @default("AVAILABLE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([transactionId])
+  @@index([tenantId, studentId, currency, status])
+}
+
+model FinancialDocumentSequence {
+  id           String   @id @default(uuid())
+  tenantId     String
+  documentType String
+  year         Int
+  lastSequence Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, documentType, year])
+  @@index([tenantId, documentType])
 }
 
 model StatusHistory {
@@ -1342,6 +1505,45 @@ enum DocumentStatus {
   VERIFIED
   REJECTED
   EXPIRED
+}
+
+enum PaymentFeeSectionType {
+  INITIAL_UNIVERSITY
+  OTHER
+}
+
+enum FeeSectionStatus {
+  NOT_CONFIGURED
+  PAYMENT_PENDING
+  PROOF_UPLOADED
+  UNDER_VERIFICATION
+  PARTIALLY_PAID
+  FULLY_PAID
+  OVERPAID
+  CANCELLED
+  NOT_REQUIRED
+}
+
+enum PaymentTransactionStatus {
+  PROOF_UPLOADED
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  REVERSED
+  REFUNDED
+}
+
+enum SstTreatment {
+  NO_SST
+  SST_INCLUDED
+  ADD_SST
+  CUSTOM_SST_RATE
+}
+
+enum ReceiptStatus {
+  ISSUED
+  REVERSED
+  REFUNDED
 }
 
 enum PaymentStatus {

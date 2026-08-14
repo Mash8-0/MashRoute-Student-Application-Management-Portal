@@ -25,6 +25,8 @@ const DOC_TITLES = {
   EVAL_DOCUMENT:       'EVAL Document',
   VISA_DOCUMENT:       'Visa Document',
   MEDICAL_CERTIFICATE: 'Medical Certificate',
+  INVOICE:             'Invoice / Folio',
+  TUITION_INVOICE:     'Tuition Folio',
   ADDITIONAL:          'Additional Document',
 };
 

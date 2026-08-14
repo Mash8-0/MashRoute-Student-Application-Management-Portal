@@ -142,7 +142,7 @@ export default function DocumentTimeline({ documents = [], canDelete = false, on
   const stageGroups = STAGES
     .map((stage) => ({
       stage,
-      docs: documents.filter((d) => stage.docTypes.includes(d.type)),
+      docs: documents.filter((d) => stage.docTypes.some((definition) => definition.type === d.type)),
     }))
     .filter((g) => g.docs.length > 0);
 

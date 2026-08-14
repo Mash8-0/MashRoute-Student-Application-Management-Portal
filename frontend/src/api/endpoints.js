@@ -154,6 +154,16 @@ export const emgsPaymentAPI = {
   reverse: (transactionId, data) => api.post(`/emgs-payments/transactions/${transactionId}/reverse`, data),
 };
 
+export const studentPaymentAPI = {
+  getApplicationPayment: (applicationId) => api.get(`/student-payments/applications/${applicationId}`),
+  configureSection: (applicationId, data) => api.post(`/student-payments/applications/${applicationId}/sections`, data),
+  submitProof: (sectionId, data) => api.post(`/student-payments/sections/${sectionId}/proofs`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  startReview: (transactionId) => api.post(`/student-payments/transactions/${transactionId}/review`),
+  cancelReview: (transactionId) => api.post(`/student-payments/transactions/${transactionId}/cancel-review`),
+  verify: (transactionId, data) => api.post(`/student-payments/transactions/${transactionId}/verify`, data),
+  reject: (transactionId, data) => api.post(`/student-payments/transactions/${transactionId}/reject`, data),
+};
+
 // ─── LOE ──────────────────────────────────────────────────────────────────────
 export const loeAPI = {
   generate: (applicationId, data) => api.post(`/applications/${applicationId}/loe/generate`, data),
