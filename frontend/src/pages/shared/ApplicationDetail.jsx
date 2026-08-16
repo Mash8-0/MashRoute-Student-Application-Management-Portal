@@ -11,6 +11,7 @@ import LOEActions from '../../components/loe/LOEActions';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import ArrivalCard from '../../components/documents/ArrivalCard';
 import EmgsPaymentSetupModal from '../../components/payments/EmgsPaymentSetupModal';
+import TuitionPaymentDecisionModal from '../../components/payments/TuitionPaymentDecisionModal';
 import { STAGES } from '../../lib/documentStages';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/toast';
@@ -90,18 +91,11 @@ function IWantToMenu({ app, user, onAction }) {
       if (app.offerLetterUrl) actions.push({ id: 'view-ol', label: 'View Offer Letter', icon: FileText });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
     }
-  } else if (app.paymentVerifiedAt && !app.invoiceIssuedAt) {
+  } else if (app.paymentVerifiedAt || app.paymentProofUrl) {
     if (isAdmin) {
-      actions.push({ id: 'issue-invoice', label: 'Issue Invoice', icon: Receipt, variant: 'primary' });
-      actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
-    }
-  } else if (app.paymentProofUrl && !app.paymentVerifiedAt) {
-    if (isAdmin) {
-      actions.push({ id: 'verify-payment', label: 'Verify Payment', icon: ShieldCheck, variant: 'primary' });
       actions.push({ id: 'update-status', label: 'Update Status', icon: CheckCircle2 });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
     } else {
-      actions.push({ id: 'view-proof', label: 'View Payment Proof', icon: Eye });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
     }
   } else if (app.status === 'OFFER_LETTER_ISSUED') {
@@ -116,7 +110,6 @@ function IWantToMenu({ app, user, onAction }) {
       actions.push({ id: 'delete', label: 'Delete Application', icon: Trash2, variant: 'danger' });
     } else {
       if (app.offerLetterUrl) actions.push({ id: 'view-ol', label: 'View / Download Offer Letter', icon: Download });
-      actions.push({ id: 'upload-proof', label: 'Upload Payment Proof', icon: Upload, variant: 'primary' });
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
     }
   } else {
@@ -128,6 +121,12 @@ function IWantToMenu({ app, user, onAction }) {
     } else {
       actions.push({ id: 'edit', label: 'Edit Application', icon: Edit });
     }
+  }
+
+  // Admins must be able to soft-delete from every workflow stage, including
+  // payment-proof and payment-verified states.
+  if (isAdmin && !actions.some((action) => action.id === 'delete')) {
+    actions.push({ id: 'delete', label: 'Delete Application', icon: Trash2, variant: 'danger' });
   }
 
   if (!actions.length) return null;
@@ -437,13 +436,13 @@ export default function ApplicationDetail() {
   // Modals
   const [showStatusPanel, setShowStatusPanel] = useState(false);
   const [showUploadOL, setShowUploadOL] = useState(false);
-  const [showUploadProof, setShowUploadProof] = useState(false);
   const [showEmgsModal, setShowEmgsModal] = useState(false);
   const [editingPostEval, setEditingPostEval] = useState(false);
   const [previewFile, setPreviewFile] = useState(null); // { url, label }
   const [emailPreview, setEmailPreview] = useState(null);
   const [emailPreviewWidth, setEmailPreviewWidth] = useState('desktop');
   const [showEmgsPaymentSetup, setShowEmgsPaymentSetup] = useState(false);
+  const [showTuitionPaymentDecision, setShowTuitionPaymentDecision] = useState(false);
 
   const isAdmin = ADMIN_ROLES.includes(user?.role);
   const isEmgsStage = application?.invoiceIssuedAt;
@@ -507,12 +506,6 @@ export default function ApplicationDetail() {
         if (application.offerLetterUrl) setPreviewFile({ url: application.offerLetterUrl, label: 'Offer Letter' });
         break;
       case 'retry-ol-email': handleRetryOfferLetterEmail(); break;
-      case 'upload-proof': setShowUploadProof(true); break;
-      case 'view-proof':
-        if (application.paymentProofUrl) setPreviewFile({ url: application.paymentProofUrl, label: 'Payment Proof' });
-        break;
-      case 'verify-payment': handleVerifyPayment(); break;
-      case 'issue-invoice': handleIssueInvoice(); break;
       case 'update-emgs': setShowEmgsModal(true); break;
       case 'edit': navigate(`/applications/${id}/edit`); break;
       case 'delete': handleDelete(); break;
@@ -631,50 +624,6 @@ export default function ApplicationDetail() {
     }
   };
 
-  const handleUploadPaymentProof = async (file) => {
-    setProcessing(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await applicationAPI.uploadPaymentProof(id, fd);
-      setApplication(res.data.data);
-      setShowUploadProof(false);
-      toast.success('Payment proof uploaded');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleVerifyPayment = async () => {
-    if (!window.confirm('Mark payment as verified?')) return;
-    setProcessing(true);
-    try {
-      const res = await applicationAPI.verifyPayment(id);
-      setApplication(res.data.data);
-      toast.success('Payment verified');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to verify payment');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleIssueInvoice = async () => {
-    if (!window.confirm('Issue invoice and start EMGS workflow?')) return;
-    setProcessing(true);
-    try {
-      const res = await applicationAPI.issueInvoice(id);
-      setApplication(res.data.data);
-      toast.success('Invoice issued — EMGS workflow started');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to issue invoice');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleUpdateEmgs = async (percentage, notes) => {
     setProcessing(true);
     try {
@@ -761,6 +710,7 @@ export default function ApplicationDetail() {
       setApplication(res.data.data);
       await fetchApplication(true);
       toast.success('eVisa uploaded');
+      if (ADMIN_ROLES.includes(user?.role)) setShowTuitionPaymentDecision(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
@@ -804,6 +754,9 @@ export default function ApplicationDetail() {
     }
   };
 
+  const openTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment&tuitionApp=${app.id}`);
+  const viewTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment`);
+
   const handleUploadFlightTicket = async (file) => {
     if (!file) { toast.error('Please select a file'); return; }
     setProcessing(true);
@@ -837,7 +790,7 @@ export default function ApplicationDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Permanently delete this application?')) return;
+    if (!window.confirm('Delete this application? It can be restored from Restore.')) return;
     setProcessing(true);
     try {
       await applicationAPI.delete(id);
@@ -885,12 +838,15 @@ export default function ApplicationDetail() {
   const showEvisa = postIdx >= postEvalIndex('EVISA_APPROVED') || !!app.evisaUrl;
   // Show arrival/tuition from "Under Arrival" onward (or data already exists).
   const showArrival =
-    postIdx >= postEvalIndex('UNDER_ARRIVAL') || !!app.flightTicketUrl || !!app.tuitionProofUrl || !!app.arrivalDate;
+    postIdx >= postEvalIndex('UNDER_ARRIVAL') || !!app.evisaUrl || !!app.flightTicketUrl || !!app.tuitionProofUrl || !!app.arrivalDate;
   // Derived tuition verification state (falls back for pre-existing rows)
   const tuitionStatus =
     app.tuitionVerificationStatus && app.tuitionVerificationStatus !== 'NONE'
       ? app.tuitionVerificationStatus
       : app.tuitionVerifiedAt ? 'VERIFIED' : app.tuitionProofUrl ? 'PENDING' : 'NONE';
+  const tuitionPayment = app.payments?.find((payment) => payment.paymentType === 'TUITION');
+  const tuitionInvoice = tuitionPayment?.Invoice?.[0];
+  const tuitionRequest = tuitionPayment?.InvoiceRequest?.find((request) => request.requestStatus === 'REQUESTED');
 
   // Logical gating: which stage can be reached next, and what (if anything) blocks it.
   const nextPostEvalStage = POST_EVAL_STAGES[postIdx + 1] || null;
@@ -916,7 +872,6 @@ export default function ApplicationDetail() {
   // (view / download / replace). Only rows with a file are shown.
   const workflowDocs = [
     { key: 'offer', label: 'Offer Letter', url: app.offerLetterUrl, at: app.offerLetterUploadedAt, by: app.offerLetterUploadedBy, replace: handleUploadOfferLetter, adminOnly: true },
-    { key: 'payment', label: 'EMGS Payment Proof', url: app.paymentProofUrl, at: app.paymentProofUploadedAt, by: app.paymentProofUploadedBy, replace: handleUploadPaymentProof },
     { key: 'emgs', label: 'EMGS Approval Letter', url: app.emgsApprovalUrl, at: app.emgsApprovalUploadedAt, replace: (f) => handleUploadApproval('emgs', f) },
     { key: 'eval', label: 'eVAL Approval Letter', url: app.evalApprovalUrl, at: app.evalApprovalUploadedAt, replace: (f) => handleUploadApproval('eval', f) },
     { key: 'evisa', label: 'eVisa', url: app.evisaUrl, at: app.evisaUploadedAt, by: app.evisaUploadedBy, replace: handleUploadEvisa },
@@ -931,6 +886,13 @@ export default function ApplicationDetail() {
           application={application}
           onClose={() => setShowEmgsPaymentSetup(false)}
           onConfigured={() => fetchApplication(true)}
+        />
+      )}
+      {showTuitionPaymentDecision && application && (
+        <TuitionPaymentDecisionModal
+          application={application}
+          onClose={() => setShowTuitionPaymentDecision(false)}
+          onOpenPayment={openTuitionInPaymentTab}
         />
       )}
       {emailPreview && (
@@ -1237,25 +1199,6 @@ export default function ApplicationDetail() {
             </Card>
           )}
 
-          {/* Admin: Issue Invoice quick card */}
-          {isAdmin && app.paymentVerifiedAt && !app.invoiceIssuedAt && (
-            <Card className="border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-start gap-3">
-                  <Receipt className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-emerald-800">Ready for Invoice</p>
-                    <p className="text-xs text-emerald-700 mt-0.5 mb-3">Payment verified. Issue invoice to start EMGS processing.</p>
-                    <Button size="sm" onClick={handleIssueInvoice} disabled={processing} className="w-full bg-emerald-600 hover:bg-emerald-700">
-                      {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
-                      Issue Invoice
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Admin: EMGS update quick button — hidden during the post-eVAL workflow */}
           {isAdmin && isEmgsStage && app.status !== 'COMPLETED' && !postEvalActive && (
             <Card>
@@ -1533,6 +1476,24 @@ export default function ApplicationDetail() {
               transition={{ duration: 0.3, ease: 'easeInOut' }}
             >
             <SectionCard title="Tuition Payment" icon={Receipt}>
+              <div className="mb-4 space-y-3">
+                {tuitionInvoice?.pdfUrl ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                    <div><p className="text-sm font-semibold text-emerald-800">Tuition payment open</p><p className="text-xs text-emerald-700">{tuitionInvoice.currency} {Number(tuitionInvoice.grandTotal || tuitionInvoice.amount).toLocaleString()} · Due {formatDate(tuitionInvoice.dueDate)}</p></div>
+                    <a href={tuitionInvoice.pdfUrl} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline"><Download className="h-3.5 w-3.5" /> View Folio PDF</Button></a>
+                  </div>
+                ) : isAdmin ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
+                    <div><p className="text-sm font-semibold">{tuitionRequest ? 'Tuition payment requested' : 'Open tuition payment'}</p><p className="text-xs text-muted-foreground">Generate the payment folio after confirming the fee and due date.</p></div>
+                    <Button size="sm" onClick={openTuitionInPaymentTab} disabled={!app.evisaUrl}><Receipt className="h-3.5 w-3.5" /> Open Tuition Fees Payment &amp; Generate Tuition Fees Folio</Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div><p className="text-sm font-semibold text-amber-800">{tuitionRequest ? 'Request awaiting admin' : 'Tuition payment is not open'}</p><p className="text-xs text-amber-700">Ask an admin to configure the tuition fee and issue the folio.</p></div>
+                    {!tuitionRequest && <Button size="sm" variant="outline" onClick={viewTuitionInPaymentTab} disabled={!app.evisaUrl}>Request Tuition Payment</Button>}
+                  </div>
+                )}
+              </div>
               {app.tuitionProofUrl ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-4">
@@ -1617,7 +1578,7 @@ export default function ApplicationDetail() {
                     </div>
                   )}
                 </div>
-              ) : canUpload ? (
+              ) : canUpload && tuitionInvoice?.pdfUrl ? (
                 <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
                   <Receipt className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">No tuition payment proof uploaded yet</p>
@@ -1704,14 +1665,6 @@ export default function ApplicationDetail() {
           title="Upload Offer Letter"
           onClose={() => setShowUploadOL(false)}
           onUpload={handleUploadOfferLetter}
-          uploading={processing}
-        />
-      )}
-      {showUploadProof && (
-        <FileUploadModal
-          title="Upload Payment Proof"
-          onClose={() => setShowUploadProof(false)}
-          onUpload={handleUploadPaymentProof}
           uploading={processing}
         />
       )}

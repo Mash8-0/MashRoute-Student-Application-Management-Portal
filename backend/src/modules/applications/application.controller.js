@@ -70,6 +70,13 @@ const uploadPaymentProof = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, application, 'Payment proof uploaded successfully');
 });
 
+const deleteWorkflowDocument = asyncHandler(async (req, res) => {
+  const application = await applicationService.deleteWorkflowDocument(
+    req.params.id, req.tenantId, req.user.role, req.params.kind
+  );
+  return ApiResponse.success(res, application, 'Workflow document deleted');
+});
+
 const verifyPayment = asyncHandler(async (req, res) => {
   const { notes } = req.body;
   const application = await applicationService.verifyPayment(
@@ -146,6 +153,16 @@ const uploadTuitionProof = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, application, 'Tuition payment proof uploaded successfully');
 });
 
+const requestTuitionPayment = asyncHandler(async (req, res) => {
+  const request = await applicationService.requestTuitionPayment(req.params.id, req.tenantId, req.user.id, req.user.role, req.body.note);
+  return ApiResponse.success(res, request, 'Tuition payment request submitted');
+});
+
+const openTuitionPayment = asyncHandler(async (req, res) => {
+  const result = await applicationService.openTuitionPayment(req.params.id, req.tenantId, req.user.id, req.user.role, req.body);
+  return ApiResponse.success(res, result, 'Tuition payment opened and folio generated');
+});
+
 const verifyTuition = asyncHandler(async (req, res) => {
   const { action, remarks, notes } = req.body;
   const application = await applicationService.verifyTuition(
@@ -202,10 +219,10 @@ const permanentlyDeleteApplication = asyncHandler(async (req, res) => {
 
 module.exports = {
   createApplication, listApplications, getApplication, updateApplication,
-  acceptApplication, updateStatus, uploadOfferLetter, uploadPaymentProof,
+  acceptApplication, updateStatus, uploadOfferLetter, uploadPaymentProof, deleteWorkflowDocument,
   verifyPayment, issueInvoice, updateEmgsProgress, updatePostEvalStatus,
   updateArrival, uploadEvisa, uploadEmgsApproval, uploadEvalApproval,
-  uploadTuitionProof, verifyTuition, setCommissionStatus,
+  requestTuitionPayment, openTuitionPayment, uploadTuitionProof, verifyTuition, setCommissionStatus,
   addNote, getNotes, getStatusHistory, deleteApplication,
   listDeletedApplications, restoreApplication, permanentlyDeleteApplication,
 };

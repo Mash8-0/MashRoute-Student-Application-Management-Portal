@@ -8,7 +8,9 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
 const { logActivity } = require('../../middleware/activityLog.middleware');
 
-router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
+router.use(authenticate, tenantContext);
+router.post('/:id/tuition-request', authorize('STAFF', 'REGISTERED_AGENT'), logActivity('REQUEST_TUITION_PAYMENT', 'Application'), controller.requestTuitionPayment);
+router.use(authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 // ─── Multer (for offer letter + payment proof uploads) ────────────────────────
 
@@ -71,6 +73,10 @@ router.post('/:id/offer-letter-email/retry', authorize('TENANT_ADMIN', 'SUPER_AD
 // Payment proof: all authenticated users (enforced in service for pre-conditions)
 router.post('/:id/payment-proof', upload.single('file'), logActivity('UPLOAD_PAYMENT_PROOF', 'Application'), controller.uploadPaymentProof);
 
+// Workflow document deletion: admins only. Clears both the stored Document and
+// the denormalized URL/metadata kept on the Application.
+router.delete('/:id/workflow-document/:kind', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('DELETE_WORKFLOW_DOCUMENT', 'Application'), controller.deleteWorkflowDocument);
+
 // Verify payment: TENANT_ADMIN only (enforced in service)
 router.post('/:id/verify-payment', logActivity('VERIFY_PAYMENT', 'Application'), controller.verifyPayment);
 
@@ -96,6 +102,7 @@ router.post('/:id/eval-approval', upload.single('file'), logActivity('UPLOAD_EVA
 router.patch('/:id/arrival', upload.single('file'), logActivity('UPDATE', 'Application'), controller.updateArrival);
 
 // Tuition payment proof: all authenticated users
+router.post('/:id/open-tuition-payment', authorize('TENANT_ADMIN', 'SUPER_ADMIN'), logActivity('OPEN_TUITION_PAYMENT', 'Application'), controller.openTuitionPayment);
 router.post('/:id/tuition-proof', upload.single('file'), logActivity('UPLOAD_TUITION_PROOF', 'Application'), controller.uploadTuitionProof);
 
 // Verify tuition payment: TENANT_ADMIN only (enforced in service)

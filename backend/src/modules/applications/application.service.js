@@ -1,10 +1,12 @@
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const prisma = require('../../config/database');
 const { getPagination, getPaginationMeta } = require('../../utils/pagination');
 const { generateReferenceNo } = require('../../utils/generateReference');
 const whatsapp = require('../../services/whatsappNotify');
 const emailNotify = require('../../services/emailNotify');
+const documentService = require('../documents/document.service');
 
 // Pre-EMGS progress milestones
 const STATUS_PROGRESS = {
@@ -35,11 +37,48 @@ const UPDATABLE_STATUSES = [
 // EMGS percentage milestones. The post-eVAL stages (Awaiting eVisa → eVisa
 // Approved → Under Arrival) are NOT percentages — they live on `postEvalStatus`.
 const EMGS_STEPS = [0, 5, 10, 15, 32, 35, 70, 80, 90, 100];
+const EMGS_PROGRESS_LABELS = {
+  0: 'EMGS Record Created',
+  5: 'Pending Submission of Payment Proof',
+  10: 'Documents in Process',
+  15: 'Documents Processing in EMGS',
+  32: 'Documents Processing in EMGS',
+  35: 'EMGS Approved',
+  70: 'eVAL Approved',
+  80: 'Medical Passed',
+  90: 'Endorsement in Progress',
+  100: 'Application Successful',
+};
+const EMGS_EMAIL_MILESTONES = new Set([0, 35, 70, 80, 90, 100]);
 
 // Post-eVAL workflow states (separate from the EMGS percentage).
 const POST_EVAL_STATUSES = ['AWAITING_EVISA', 'EVISA_APPROVED', 'UNDER_ARRIVAL', 'ARRIVAL_COMPLETED'];
 const ENGLISH_PROFICIENCY_OPTIONS = ['IELTS', 'PTE', 'MOI', 'NONE'];
 const INTAKE_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const EVISA_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024;
+const EVISA_ATTACHMENTS_TOTAL_MAX_BYTES = 30 * 1024 * 1024;
+const WORKFLOW_ATTACHMENT_HOSTS = new Set([
+  'drive.google.com', 'drive.usercontent.google.com', 'www.googleapis.com',
+  'lh3.googleusercontent.com', 'mashroute.com', 'www.mashroute.com',
+]);
+
+function isApprovedWorkflowAttachmentHost(hostname) {
+  return WORKFLOW_ATTACHMENT_HOSTS.has(hostname) || hostname.endsWith('.googleusercontent.com');
+}
+
+async function readWorkflowEmailAttachment(fileUrl, filename) {
+  const url = new URL(fileUrl);
+  if (url.protocol !== 'https:' || !isApprovedWorkflowAttachmentHost(url.hostname)) {
+    throw new Error(`${filename} uses an unapproved storage location`);
+  }
+  const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok || !response.body) throw new Error(`${filename} could not be retrieved from storage`);
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (contentLength > EVISA_ATTACHMENT_MAX_BYTES) throw new Error(`${filename} exceeds the email attachment size limit`);
+  const content = Buffer.from(await response.arrayBuffer());
+  if (!content.length || content.length > EVISA_ATTACHMENT_MAX_BYTES) throw new Error(`${filename} is empty or exceeds the email attachment size limit`);
+  return { filename, content, contentType: response.headers.get('content-type') || 'application/pdf' };
+}
 
 async function resolveApplicationIntake(tenantId, intakeId, { requireAvailable = false } = {}) {
   if (!intakeId) return null;
@@ -531,6 +570,71 @@ class ApplicationService {
     return updated;
   }
 
+  async deleteWorkflowDocument(id, tenantId, userRole, kind) {
+    if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) {
+      throw { statusCode: 403, message: 'Only admins can delete workflow documents' };
+    }
+
+    const definitions = {
+      'offer-letter': {
+        urlField: 'offerLetterUrl',
+        documentType: 'OFFER_LETTER',
+        clear: { offerLetterUrl: null, offerLetterUploadedById: null, offerLetterUploadedAt: null },
+      },
+      'payment-proof': {
+        urlField: 'paymentProofUrl',
+        documentType: 'BANK_STATEMENT',
+        clear: {
+          paymentProofUrl: null, paymentProofUploadedById: null, paymentProofUploadedAt: null,
+          paymentVerifiedById: null, paymentVerifiedAt: null,
+        },
+      },
+      'emgs-approval': {
+        urlField: 'emgsApprovalUrl',
+        clear: {
+          emgsApprovalUrl: null, emgsApprovalUploadedById: null, emgsApprovalUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
+      'eval-approval': {
+        urlField: 'evalApprovalUrl',
+        clear: {
+          evalApprovalUrl: null, evalApprovalUploadedById: null, evalApprovalUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
+      evisa: {
+        urlField: 'evisaUrl',
+        clear: {
+          evisaUrl: null, evisaUploadedById: null, evisaUploadedAt: null,
+          postEvalStatus: 'AWAITING_EVISA',
+        },
+      },
+    };
+    const definition = definitions[kind];
+    if (!definition) throw { statusCode: 400, message: 'Unsupported workflow document type' };
+
+    const application = await this._assertExists(id, tenantId);
+    const fileUrl = application[definition.urlField];
+    if (!fileUrl) throw { statusCode: 404, message: 'Workflow document not found' };
+
+    const document = definition.documentType ? await prisma.document.findFirst({
+      where: {
+        tenantId, applicationId: id, studentId: application.studentId,
+        type: definition.documentType, fileUrl, deletedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    }) : null;
+    if (document) await documentService.deleteDocument(document.id, tenantId);
+    if (!document) await this._deleteStoredWorkflowFile(fileUrl);
+
+    return prisma.application.update({
+      where: { id },
+      data: definition.clear,
+      include: this._detailInclude(),
+    });
+  }
+
   // ─── Verify Payment (TENANT_ADMIN only) ───────────────────────────────────
 
   async verifyPayment(id, tenantId, userId, userRole, notes) {
@@ -588,6 +692,14 @@ class ApplicationService {
         emgsPercentage: 0,
       },
       include: this._detailInclude(),
+    });
+
+    // The EMGS payment ledger creates its invoice as a draft during payment
+    // setup. Issuing it here publishes that same invoice instead of leaving the
+    // financial record in DRAFT while the application enters EMGS processing.
+    await prisma.invoice.updateMany({
+      where: { tenantId, applicationId: id, invoiceType: 'EMGS', status: 'DRAFT' },
+      data: { status: 'ISSUED', issuedAt: new Date(), issuedById: userId },
     });
 
     await this._recordStatusHistory(id, userId, oldStatus, 'EMGS_PROCESSING',
@@ -660,14 +772,16 @@ class ApplicationService {
       });
     }
 
-    emailNotify.notify('application_status_updated', updated, {
-      status: newStatus.replace(/_/g, ' '),
-      notifyTenantAdmin: newStatus === 'COMPLETED',
-    });
-    if (newStatus === 'COMPLETED') {
-      emailNotify.notify('application_successful', updated);
+    if (EMGS_EMAIL_MILESTONES.has(pct)) {
+      const emgsMilestone = `${pct}% — ${EMGS_PROGRESS_LABELS[pct]}`;
+      emailNotify.notify('application_status_updated', updated, {
+        title: 'EMGS Progress Updated',
+        subject: `MashRoute: EMGS Progress Updated to ${pct}%`,
+        status: emgsMilestone,
+        message: `Your EMGS application progress is now ${emgsMilestone}.\nYou can review the latest details below.`,
+        notifyTenantAdmin: newStatus === 'COMPLETED',
+      });
     }
-
     return updated;
   }
 
@@ -778,7 +892,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('evisa_approved', updated);
-    emailNotify.notify('evisa_approved', updated);
     return updated;
   }
 
@@ -795,7 +908,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('emgs_approved', updated);
-    emailNotify.notify('emgs_approved', updated);
     return updated;
   }
 
@@ -812,7 +924,6 @@ class ApplicationService {
       include: this._baseInclude(),
     });
     whatsapp.notify('eval_approved', updated);
-    emailNotify.notify('eval_approved', updated);
     return updated;
   }
 
@@ -821,6 +932,8 @@ class ApplicationService {
 
   async uploadTuitionProof(id, tenantId, userId, file) {
     const application = await this._assertExists(id, tenantId);
+    const tuitionInvoice = await prisma.invoice.findFirst({ where: { tenantId, applicationId: id, invoiceType: 'TUITION', status: { in: ['ISSUED', 'UNPAID', 'DUE'] }, pdfUrl: { not: null } } });
+    if (!tuitionInvoice) throw { statusCode: 400, message: 'Admin must generate the tuition folio before payment proof can be uploaded.' };
 
     // Drive: Tuition Payment {Passport} {Name} {Date}
     const ctx = await this._namingContext(application);
@@ -839,6 +952,95 @@ class ApplicationService {
       },
       include: this._baseInclude(),
     });
+  }
+
+  async requestTuitionPayment(id, tenantId, userId, userRole, note) {
+    if (['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) throw { statusCode: 400, message: 'Admins can open tuition payment directly.' };
+    const application = await this._assertExists(id, tenantId);
+    if (userRole === 'REGISTERED_AGENT' && application.agentId !== userId) throw { statusCode: 403, message: 'Agents can request tuition payment only for their assigned application.' };
+    if (!application.evisaUrl) throw { statusCode: 400, message: 'Upload and approve the eVisa before requesting tuition payment.' };
+    return prisma.$transaction(async (tx) => {
+      let payment = await tx.payment.findFirst({ where: { tenantId, applicationId: id, paymentType: 'TUITION' }, orderBy: { createdAt: 'desc' } });
+      if (!payment) payment = await tx.payment.create({ data: { tenantId, studentId: application.studentId, applicationId: id, amount: 0, currency: 'MYR', status: 'PENDING', paymentType: 'TUITION', description: 'Tuition Fees', submittedByUserId: userId, submittedByRole: userRole } });
+      const existing = await tx.invoiceRequest.findFirst({ where: { tenantId, applicationId: id, paymentId: payment.id, requestStatus: 'REQUESTED' } });
+      if (existing) return existing;
+      return tx.invoiceRequest.create({ data: { id: crypto.randomUUID(), tenantId, applicationId: id, studentId: application.studentId, paymentId: payment.id, requestedBy: userId, note: note || null, updatedAt: new Date() } });
+    });
+  }
+
+  async openTuitionPayment(id, tenantId, userId, userRole, data) {
+    if (!['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole)) throw { statusCode: 403, message: 'Only admins can open tuition payment and generate the folio.' };
+    const application = await prisma.application.findFirst({ where: { id, tenantId, deletedAt: null }, include: { student: true, university: true, tenant: true } });
+    if (!application) throw { statusCode: 404, message: 'Application not found' };
+    if (!application.evisaUrl || !application.emgsApprovalUrl || !application.evalApprovalUrl) throw { statusCode: 400, message: 'eVisa, EMGS Approval, and eVAL Approval must all be uploaded first.' };
+    const amount = Number(data.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw { statusCode: 400, message: 'A valid tuition amount is required.' };
+    const dueDate = new Date(data.dueDate);
+    if (Number.isNaN(dueDate.getTime())) throw { statusCode: 400, message: 'A valid tuition due date is required.' };
+    const currency = String(data.currency || 'MYR').toUpperCase();
+    const accountType = data.accountType === 'UNIVERSITY_ACCOUNT' ? 'UNIVERSITY_ACCOUNT' : 'TENANT_ACCOUNT';
+    const destinationAccount = await prisma.paymentDestinationAccount.findFirst({ where: {
+      id: data.destinationAccountId, tenantId, accountType, currency, isActive: true, archivedAt: null,
+      ...(accountType === 'UNIVERSITY_ACCOUNT' ? { universityId: application.universityId } : {}),
+    } });
+    if (!destinationAccount) throw { statusCode: 400, message: 'Select an eligible active payment account for this destination and currency.' };
+    const paymentAccountSnapshot = {
+      accountType: destinationAccount.accountType, accountLabel: destinationAccount.label,
+      accountHolderName: destinationAccount.accountHolderName, bankName: destinationAccount.bankName,
+      maskedAccountNumber: destinationAccount.maskedAccountNumber, currency: destinationAccount.currency,
+      branchName: destinationAccount.branchName, swiftBic: destinationAccount.swiftBic,
+      paymentInstructions: destinationAccount.paymentInstructions,
+    };
+
+    const result = await prisma.$transaction(async (tx) => {
+      let payment = await tx.payment.findFirst({ where: { tenantId, applicationId: id, paymentType: 'TUITION' }, orderBy: { createdAt: 'desc' } });
+      if (payment) payment = await tx.payment.update({ where: { id: payment.id }, data: { amount, currency, dueDate, description: 'Tuition Fees', notes: data.notes || null } });
+      else payment = await tx.payment.create({ data: { tenantId, studentId: application.studentId, applicationId: id, amount, currency, dueDate, status: 'PENDING', paymentType: 'TUITION', description: 'Tuition Fees', notes: data.notes || null, submittedByUserId: userId, submittedByRole: userRole } });
+      await tx.invoice.updateMany({ where: { tenantId, applicationId: id, invoiceType: 'TUITION', status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledById: userId } });
+      const invoiceId = crypto.randomUUID();
+      const invoiceNo = `TUI-${new Date().getUTCFullYear()}-${invoiceId.slice(0, 8).toUpperCase()}`;
+      const invoice = await tx.invoice.create({ data: {
+        id: invoiceId, tenantId, applicationId: id, studentId: application.studentId, paymentId: payment.id,
+        invoiceNo, displayInvoiceNo: invoiceNo, invoiceType: 'TUITION', amount, subtotal: amount, grandTotal: amount,
+        currency, status: 'DRAFT', dueDate, updatedAt: new Date(), createdById: userId,
+        studentName: application.student.fullName, passportNo: application.student.passportNumber,
+        studentEmail: application.student.email, studentPhone: application.student.phone,
+        universityName: application.university?.name, programmeName: application.program, intake: application.intake,
+        referenceNo: application.referenceNo, tenantName: application.tenant.name, tenantEmail: application.tenant.email,
+        tenantPhone: application.tenant.phone, tenantAddress: application.tenant.address,
+        paymentDestinationType: accountType, destinationAccountId: destinationAccount.id, paymentAccountSnapshot,
+        notes: data.notes || 'Please pay the tuition fees by the due date and upload payment proof in MashRoute.',
+      } });
+      await tx.invoiceItem.create({ data: { id: crypto.randomUUID(), invoiceId, description: data.description || 'Tuition Fees', quantity: 1, unitPrice: amount, amount, updatedAt: new Date() } });
+      await tx.invoiceRequest.updateMany({ where: { tenantId, applicationId: id, requestStatus: 'REQUESTED' }, data: { requestStatus: 'COMPLETED', reviewedBy: userId, reviewedAt: new Date(), updatedAt: new Date() } });
+      return { payment, invoice };
+    });
+
+    const { generateInvoicePdf } = require('../../services/invoicePdf');
+    const invoiceWithItems = { ...result.invoice, items: [{ description: data.description || 'Tuition Fees', quantity: 1, unitPrice: amount, amount }] };
+    const pdfPath = await generateInvoicePdf({ invoice: invoiceWithItems, payment: result.payment, application, tenant: application.tenant });
+    const ctx = await this._namingContext(application);
+    const localInvoiceDir = path.resolve(__dirname, '../../../uploads/temp');
+    await fs.mkdir(localInvoiceDir, { recursive: true });
+    const localInvoicePath = path.join(localInvoiceDir, `${result.invoice.invoiceNo}.pdf`);
+    await fs.copyFile(pdfPath, localInvoicePath);
+    await fs.unlink(pdfPath).catch(() => {});
+    const stored = await this._uploadNamed({ path: localInvoicePath, originalname: `${result.invoice.invoiceNo}.pdf`, mimetype: 'application/pdf', _keepOnDisk: false }, `Tuition Folio ${ctx.passport} ${ctx.name}`, application, ctx);
+    const invoice = await prisma.invoice.update({ where: { id: result.invoice.id }, data: { status: 'ISSUED', pdfUrl: stored.fileUrl, issuedAt: new Date(), issuedById: userId, generatedByUserId: userId } });
+    const updated = await prisma.application.update({ where: { id }, data: { tuitionInvoiceIssuedAt: new Date(), tuitionInvoiceIssuedById: userId }, include: this._detailInclude() });
+
+    try {
+      const attachments = await Promise.all([
+        readWorkflowEmailAttachment(updated.evisaUrl, 'eVisa.pdf'),
+        readWorkflowEmailAttachment(updated.emgsApprovalUrl, 'EMGS Approval.pdf'),
+        readWorkflowEmailAttachment(updated.evalApprovalUrl, 'eVAL Approval.pdf'),
+        readWorkflowEmailAttachment(invoice.pdfUrl, 'Tuition Fees Folio.pdf'),
+      ]);
+      const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.content.length, 0);
+      if (totalBytes > EVISA_ATTACHMENTS_TOTAL_MAX_BYTES) throw new Error('Combined approval and tuition folio attachments exceed the email size limit');
+      emailNotify.notify('evisa_approved', updated, { title: 'eVisa Approved — Tuition Payment Opened', subject: 'MashRoute: eVisa Approved and Tuition Fees Folio', status: 'TUITION PAYMENT OPEN', message: 'The eVisa is approved and tuition payment is now open. The eVisa, EMGS Approval, eVAL Approval, and tuition fees folio are attached.', attachments });
+    } catch (error) { console.error('[email] tuition folio notification skipped:', error?.message || error); }
+    return { application: updated, invoice };
   }
 
   // ─── Verify / Reject Tuition (TENANT_ADMIN only) ──────────────────────────
@@ -1063,6 +1265,22 @@ class ApplicationService {
     return { fileUrl: res.fileUrl, publicId: res.driveFileId || null };
   }
 
+  async _deleteStoredWorkflowFile(fileUrl) {
+    let parsed;
+    try { parsed = new URL(fileUrl); } catch { return; }
+    const driveId = parsed.searchParams.get('id') || parsed.pathname.match(/\/d\/([\w-]+)/)?.[1];
+    if (driveId) {
+      const { deleteFromDrive } = require('../../services/driveUpload');
+      await deleteFromDrive(driveId);
+      return;
+    }
+    if (parsed.pathname.startsWith('/uploads/')) {
+      const uploadsRoot = path.resolve(__dirname, '../../../uploads');
+      const localPath = path.resolve(uploadsRoot, parsed.pathname.replace(/^\/uploads\//, ''));
+      if (localPath.startsWith(`${uploadsRoot}${path.sep}`)) await fs.unlink(localPath).catch(() => {});
+    }
+  }
+
   async _readStoredOfferLetter(document) {
     if (document.mimeType !== 'application/pdf') throw { statusCode: 400, message: 'The stored Offer Letter is not a PDF' };
     const maxBytes = Number(process.env.OFFER_LETTER_PREVIEW_MAX_BYTES) || 20 * 1024 * 1024;
@@ -1125,7 +1343,7 @@ class ApplicationService {
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
       },
-      payments: { orderBy: { createdAt: 'desc' } },
+      payments: { orderBy: { createdAt: 'desc' }, include: { Invoice: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' } }, InvoiceRequest: { orderBy: { createdAt: 'desc' } } } },
       statusHistory: {
         orderBy: { createdAt: 'desc' },
         include: { changedBy: { select: { firstName: true, lastName: true } } },

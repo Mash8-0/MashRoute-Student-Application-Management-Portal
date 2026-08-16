@@ -29,7 +29,11 @@ export default function EmgsPaymentSetupModal({ application, onClose, onConfigur
 
   useEffect(() => {
     if (screen !== 'setup') return;
-    emgsPaymentAPI.listAccounts({ accountType: form.accountType, universityId: application.universityId, currency: form.currency })
+    emgsPaymentAPI.listAccounts({
+      accountType: form.accountType,
+      ...(form.accountType === 'UNIVERSITY_ACCOUNT' && { universityId: application.universityId }),
+      currency: form.currency,
+    })
       .then((res) => {
         const rows = res.data.data || [];
         setAccounts(rows);

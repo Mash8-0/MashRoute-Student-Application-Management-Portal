@@ -101,6 +101,7 @@ export const applicationAPI = {
   uploadPaymentProof: (id, formData) => api.post(`/applications/${id}/payment-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  deleteWorkflowDocument: (id, kind) => api.delete(`/applications/${id}/workflow-document/${kind}`),
   verifyPayment: (id, notes) => api.post(`/applications/${id}/verify-payment`, { notes }),
   issueInvoice: (id, notes) => api.post(`/applications/${id}/issue-invoice`, { notes }),
   updateEmgs: (id, percentage, notes) => api.patch(`/applications/${id}/emgs`, { percentage, notes }),
@@ -121,6 +122,8 @@ export const applicationAPI = {
   uploadTuitionProof: (id, formData) => api.post(`/applications/${id}/tuition-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  requestTuitionPayment: (id, note) => api.post(`/applications/${id}/tuition-request`, { note }),
+  openTuitionPayment: (id, data) => api.post(`/applications/${id}/open-tuition-payment`, data),
   // action: 'verify' | 'reject'; remarks optional (required-ish for reject)
   verifyTuition: (id, { action = 'verify', remarks } = {}) =>
     api.post(`/applications/${id}/verify-tuition`, { action, remarks }),
@@ -141,6 +144,7 @@ export const emgsPaymentAPI = {
   archiveAccount: (id) => api.delete(`/emgs-payments/accounts/${id}`),
   getApplicationPayment: (applicationId) => api.get(`/emgs-payments/applications/${applicationId}`),
   setup: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/setup`, data),
+  amendFee: (feeId, data) => api.patch(`/emgs-payments/fees/${feeId}`, data),
   postpone: (applicationId) => api.post(`/emgs-payments/applications/${applicationId}/postpone`),
   notRequired: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/not-required`, data),
   submitProof: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/proofs`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),

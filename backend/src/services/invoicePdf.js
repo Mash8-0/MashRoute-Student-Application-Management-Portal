@@ -153,9 +153,13 @@ async function generateInvoicePdf({ invoice, payment, application, tenant }) {
   y = 720;
   doc.roundedRect(45, y, 235, 86, 6).strokeColor(line).lineWidth(1).stroke();
   doc.roundedRect(62, y + 24, 24, 24, 5).fill('#f0e7ff');
-  doc.fillColor(purple).font('Helvetica-Bold').fontSize(11).text('NOTES', 100, y + 22);
+  const account = invoice.paymentAccountSnapshot && typeof invoice.paymentAccountSnapshot === 'object' ? invoice.paymentAccountSnapshot : null;
+  const accountText = account
+    ? `${account.bankName || ''} · ${account.accountHolderName || ''}\nAccount: ${account.maskedAccountNumber || '-'}${account.swiftBic ? ` · SWIFT: ${account.swiftBic}` : ''}`
+    : (invoice.notes || 'Please make payment before the due date and send payment proof through the MashRoute portal.');
+  doc.fillColor(purple).font('Helvetica-Bold').fontSize(11).text(account ? 'PAYMENT ACCOUNT' : 'NOTES', 100, y + 22);
   doc.fillColor(text).font('Helvetica').fontSize(9)
-    .text(invoice.notes || 'Please make payment before the due date and send payment proof through the MashRoute portal.', 100, y + 38, { width: 150, lineGap: 1 });
+    .text(accountText, 100, y + 38, { width: 150, lineGap: 1 });
 
   doc.roundedRect(305, y, 245, 86, 6).strokeColor(line).lineWidth(1).stroke();
   const sstLabel = Number(sstRate || 0).toFixed(2).replace(/\.00$/, '');

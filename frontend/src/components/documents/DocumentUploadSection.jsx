@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, CheckCircle2, FileText, Eye, Download, Trash2, Loader2, AlertCircle, X } from 'lucide-react';
-import { documentAPI } from '../../api/endpoints';
+import { applicationAPI, documentAPI } from '../../api/endpoints';
 import { toast } from '../ui/toast';
 import { Button } from '../ui/button';
 import { formatDate } from '../../lib/utils';
@@ -299,6 +299,21 @@ export default function DocumentUploadSection({
   englishProficiency = 'NONE',
 }) {
   const [previewFile, setPreviewFile] = useState(null);
+  const [deletingWorkflowDoc, setDeletingWorkflowDoc] = useState(null);
+
+  const handleDeleteWorkflowDoc = async (doc) => {
+    if (!doc.deleteKind || !confirm(`Delete "${doc.label}"?`)) return;
+    setDeletingWorkflowDoc(doc.key);
+    try {
+      await applicationAPI.deleteWorkflowDocument(doc.appId, doc.deleteKind);
+      toast.success('Document deleted');
+      await onRefresh?.();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete failed');
+    } finally {
+      setDeletingWorkflowDoc(null);
+    }
+  };
 
   const documentDefinitions = getDocumentDefinitions(englishProficiency);
   const definitionTypes = new Set(documentDefinitions.map(d => d.type));
@@ -397,7 +412,7 @@ export default function DocumentUploadSection({
               />
             ))}
 
-            {/* Application workflow documents (offer letter, eVisa, approvals, …) — view/download only */}
+            {/* Application workflow documents (offer letter, eVisa, approvals, …). */}
             {extraDocs.map(d => (
               <div key={d.key} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -419,6 +434,14 @@ export default function DocumentUploadSection({
                       <Download className="h-3.5 w-3.5" /> Download
                     </Button>
                   </a>
+                  {canDelete && d.deleteKind && (
+                    <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDeleteWorkflowDoc(d)} disabled={deletingWorkflowDoc === d.key}>
+                      {deletingWorkflowDoc === d.key
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

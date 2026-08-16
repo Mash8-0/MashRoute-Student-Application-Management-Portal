@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Edit, Plus, FileText, Loader2, Trash2, Receipt, CheckCircle2, CreditCard, Upload, Eye, ShieldCheck } from 'lucide-react';
 import DocumentUploadSection from '../../components/documents/DocumentUploadSection';
 import DocumentTimeline from '../../components/documents/DocumentTimeline';
 import EmgsPaymentCard from '../../components/payments/EmgsPaymentCard';
+import TuitionPaymentSetupModal from '../../components/payments/TuitionPaymentSetupModal';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import { studentAPI, applicationAPI, documentAPI, userAPI } from '../../api/endpoints';
 import { useAuthStore } from '../../store/authStore';
@@ -43,12 +44,14 @@ function AcademicRow({ label, institution, grade, year }) {
 export default function StudentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
   const [student, setStudent] = useState(null);
   const [applications, setApplications] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'payment' ? 'payment' : 'overview');
+  const [tuitionSetupApp, setTuitionSetupApp] = useState(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
@@ -61,6 +64,36 @@ export default function StudentDetail() {
   const canDelete = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canTransfer = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canVerifyPayment = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canRequestTuition = ['STAFF', 'REGISTERED_AGENT'].includes(user?.role);
+
+  useEffect(() => {
+    const requestedId = searchParams.get('tuitionApp');
+    if (!requestedId || !canVerifyPayment || !applications.length) return;
+    const match = applications.find((row) => row.id === requestedId);
+    if (match) {
+      setActiveTab('payment');
+      setTuitionSetupApp({ ...match, student });
+    }
+  }, [applications, canVerifyPayment, searchParams, student]);
+
+  const closeTuitionSetup = () => {
+    setTuitionSetupApp(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete('tuitionApp');
+    next.set('tab', 'payment');
+    setSearchParams(next, { replace: true });
+  };
+
+  const requestTuitionPayment = async (applicationId) => {
+    setPaymentAction(`tuition-request-${applicationId}`);
+    try {
+      await applicationAPI.requestTuitionPayment(applicationId, 'Requested from the student Payment tab');
+      toast.success('Tuition payment request sent to admin');
+      await fetchAll();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to request tuition payment');
+    } finally { setPaymentAction(null); }
+  };
 
   const handlePaymentProofUpload = async (applicationId, file) => {
     if (!file) return;
@@ -217,17 +250,17 @@ export default function StudentDetail() {
   // Workflow documents uploaded against this student's applications (offer letter,
   // payment, EMGS/eVAL approvals, eVisa, flight ticket, tuition proof).
   const WF_DOC_DEFS = [
-    ['offerLetterUrl', 'Offer Letter'],
-    ['paymentProofUrl', 'EMGS Payment Proof'],
-    ['emgsApprovalUrl', 'EMGS Approval Letter'],
-    ['evalApprovalUrl', 'eVAL Approval Letter'],
-    ['evisaUrl', 'eVisa'],
+    ['offerLetterUrl', 'Offer Letter', 'offer-letter'],
+    ['paymentProofUrl', 'EMGS Payment Proof', 'payment-proof'],
+    ['emgsApprovalUrl', 'EMGS Approval Letter', 'emgs-approval'],
+    ['evalApprovalUrl', 'eVAL Approval Letter', 'eval-approval'],
+    ['evisaUrl', 'eVisa', 'evisa'],
     ['flightTicketUrl', 'Flight Ticket'],
     ['tuitionProofUrl', 'Tuition Payment Proof'],
   ];
   const appDocs = applications.flatMap((a) =>
-    WF_DOC_DEFS.filter(([field]) => a[field]).map(([field, label]) => ({
-      key: `${a.id}-${field}`, label, url: a[field], subtitle: a.referenceNo, appId: a.id,
+    WF_DOC_DEFS.filter(([field]) => a[field]).map(([field, label, deleteKind]) => ({
+      key: `${a.id}-${field}`, label, url: a[field], subtitle: a.referenceNo, appId: a.id, deleteKind,
     }))
   );
   const totalDocCount = documents.length + appDocs.length;
@@ -465,7 +498,23 @@ export default function StudentDetail() {
               <CardContent className="py-12 text-center text-sm text-muted-foreground">No applications yet.</CardContent>
             </Card>
           ) : (
-            applications.map((app) => <EmgsPaymentCard key={app.id} application={app} canVerify={canVerifyPayment} onOpenApplication={() => navigate(`/applications/${app.id}`)} />)
+            applications.map((app) => <div key={app.id} className="space-y-2">
+              <EmgsPaymentCard application={app} canVerify={canVerifyPayment} onChanged={fetchAll} />
+              {canVerifyPayment && app.evisaUrl && !app.tuitionInvoiceIssuedAt && (
+                <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div><p className="text-sm font-semibold">Tuition Fees Payment</p><p className="text-xs text-muted-foreground">Open payment and generate the tuition fees folio from this Payment tab.</p></div>
+                  <Button onClick={() => setTuitionSetupApp({ ...app, student })}><Receipt className="h-4 w-4" /> Open Tuition Fees Payment &amp; Generate Tuition Fees Folio</Button>
+                </CardContent></Card>
+              )}
+              {canRequestTuition && app.evisaUrl && !app.tuitionInvoiceIssuedAt && (
+                <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div><p className="text-sm font-semibold">Tuition Fees Payment</p><p className="text-xs text-muted-foreground">Request an admin to open the tuition payment and generate its folio.</p></div>
+                  <Button variant="outline" disabled={paymentAction === `tuition-request-${app.id}`} onClick={() => requestTuitionPayment(app.id)}>
+                    {paymentAction === `tuition-request-${app.id}` && <Loader2 className="h-4 w-4 animate-spin" />} Request Tuition Payment
+                  </Button>
+                </CardContent></Card>
+              )}
+            </div>)
             /* Legacy payment card retained below only for source history.
             applications.map((app) => {
               const paymentDone = !!app.paymentProofUrl;
@@ -578,15 +627,14 @@ export default function StudentDetail() {
       )}
 
       {/* ── Documents Tab ── */}
+      {tuitionSetupApp && <TuitionPaymentSetupModal application={tuitionSetupApp} onClose={closeTuitionSetup} onConfigured={fetchAll} />}
+
       {activeTab === 'documents' && (
         <div className="space-y-4">
           <DocumentTimeline
             documents={documents}
             canDelete={canDelete}
-            onRefresh={async () => {
-              const dRes = await documentAPI.list(id);
-              setDocuments(dRes.data.data || []);
-            }}
+            onRefresh={fetchAll}
           />
           <DocumentUploadSection
             student={student}

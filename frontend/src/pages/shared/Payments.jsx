@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { formatDate, formatCurrency } from '../../lib/utils';
 import { toast } from '../../components/ui/toast';
 import { useAuthStore } from '../../store/authStore';
+import PaymentAccountsSettings from '../../components/settings/PaymentAccountsSettings';
 
 function InvoiceModal({ invoice, onClose, onSaved }) {
   const isEdit = Boolean(invoice);
@@ -142,6 +143,7 @@ export default function Payments() {
   const [showCreate, setShowCreate] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [activeSection, setActiveSection] = useState('invoices');
   const { user } = useAuthStore();
 
   const canCreate = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
@@ -273,15 +275,24 @@ export default function Payments() {
     <div className="space-y-6">
       <PageHeader
         title="Payments"
-        description="Invoice and payment management"
+        description="Manage invoices, payments, and destination accounts"
         actions={
-          canCreate && (
+          canCreate && activeSection === 'invoices' && (
             <Button onClick={() => setShowCreate(true)}>
               <Plus className="h-4 w-4" /> Create Invoice
             </Button>
           )
         }
       />
+
+      {canManage && (
+        <div className="flex gap-1 border-b border-border">
+          <button onClick={() => setActiveSection('invoices')} className={`border-b-2 px-4 py-2 text-sm font-medium ${activeSection === 'invoices' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Invoices &amp; Payments</button>
+          <button onClick={() => setActiveSection('accounts')} className={`border-b-2 px-4 py-2 text-sm font-medium ${activeSection === 'accounts' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Payment Accounts</button>
+        </div>
+      )}
+
+      {activeSection === 'accounts' && canManage ? <PaymentAccountsSettings /> : <>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -348,6 +359,7 @@ export default function Payments() {
           onSaved={fetchPayments}
         />
       )}
+      </>}
     </div>
   );
 }
