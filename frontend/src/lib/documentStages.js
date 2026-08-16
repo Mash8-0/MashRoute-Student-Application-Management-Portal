@@ -79,6 +79,14 @@ export const STAGES = [
     showWhen: (app) => !!app.offerLetterUrl || app.status === 'OFFER_LETTER_ISSUED',
     docTypes: [
       {
+        type: 'INVOICE',
+        title: 'EMGS Invoice / Folio',
+        description: 'System-generated EMGS payment folio',
+        accept: '.pdf',
+        acceptLabel: 'PDF',
+        required: false,
+      },
+      {
         type: 'PAYMENT_PROOF',
         title: 'Payment Proof',
         description: 'Proof of initial payment',
@@ -163,6 +171,14 @@ export const STAGES = [
     adminOnly: false,
     showWhen: (app) => !!app.arrivalDate || app.status === 'COMPLETED',
     docTypes: [
+      {
+        type: 'TUITION_INVOICE',
+        title: 'Tuition Folio',
+        description: 'System-generated tuition fee folio',
+        accept: '.pdf',
+        acceptLabel: 'PDF',
+        required: false,
+      },
       {
         type: 'TUITION_PROOF',
         title: 'Proof of Tuition Fees Payment',

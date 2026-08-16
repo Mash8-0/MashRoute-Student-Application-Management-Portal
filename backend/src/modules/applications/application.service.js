@@ -702,6 +702,48 @@ class ApplicationService {
       data: { status: 'ISSUED', issuedAt: new Date(), issuedById: userId },
     });
 
+    // Generate the issued EMGS folio and expose it in the student's Documents
+    // tab, matching the tuition-folio workflow.
+    const emgsInvoice = await prisma.invoice.findFirst({
+      where: { tenantId, applicationId: id, invoiceType: 'EMGS', status: 'ISSUED' },
+      orderBy: { createdAt: 'desc' },
+      include: { InvoiceItem: { orderBy: { sortOrder: 'asc' } }, Payment: true },
+    });
+    if (emgsInvoice && !emgsInvoice.pdfUrl) {
+      const pdfApplication = await prisma.application.findFirst({
+        where: { id, tenantId },
+        include: { student: true, university: true, tenant: true },
+      });
+      const { generateInvoicePdf } = require('../../services/invoicePdf');
+      const pdfPath = await generateInvoicePdf({
+        invoice: { ...emgsInvoice, items: emgsInvoice.InvoiceItem },
+        payment: emgsInvoice.Payment,
+        application: pdfApplication,
+        tenant: pdfApplication.tenant,
+      });
+      const ctx = await this._namingContext(pdfApplication);
+      const stored = await this._uploadNamed(
+        { path: pdfPath, originalname: `${emgsInvoice.invoiceNo}.pdf`, mimetype: 'application/pdf', _keepOnDisk: false },
+        `EMGS Folio ${ctx.passport} ${ctx.name}`,
+        pdfApplication,
+        ctx,
+      );
+      await fs.unlink(pdfPath).catch(() => {});
+      await prisma.$transaction(async (tx) => {
+        await tx.document.updateMany({
+          where: { tenantId, applicationId: id, type: 'INVOICE', deletedAt: null, notes: { startsWith: 'Generated EMGS folio' } },
+          data: { deletedAt: new Date(), isActive: false },
+        });
+        await tx.document.create({ data: {
+          tenantId, studentId: pdfApplication.studentId, applicationId: id, uploadedById: userId,
+          type: 'INVOICE', status: 'UPLOADED', originalName: `${emgsInvoice.invoiceNo}.pdf`, fileName: `${emgsInvoice.invoiceNo}.pdf`,
+          fileUrl: stored.fileUrl, mimeType: 'application/pdf', publicId: stored.publicId,
+          fileSource: stored.publicId ? 'google_drive' : 'local', documentStage: 'payment', notes: `Generated EMGS folio ${emgsInvoice.invoiceNo}`,
+        } });
+        await tx.invoice.update({ where: { id: emgsInvoice.id }, data: { pdfUrl: stored.fileUrl, generatedByUserId: userId } });
+      });
+    }
+
     await this._recordStatusHistory(id, userId, oldStatus, 'EMGS_PROCESSING',
       notes || 'Invoice issued — EMGS workflow started', 0);
 
@@ -987,8 +1029,10 @@ class ApplicationService {
     const paymentAccountSnapshot = {
       accountType: destinationAccount.accountType, accountLabel: destinationAccount.label,
       accountHolderName: destinationAccount.accountHolderName, bankName: destinationAccount.bankName,
-      maskedAccountNumber: destinationAccount.maskedAccountNumber, currency: destinationAccount.currency,
+      maskedAccountNumber: destinationAccount.maskedAccountNumber, protectedAccountNumber: destinationAccount.accountNumber,
+      currency: destinationAccount.currency,
       branchName: destinationAccount.branchName, swiftBic: destinationAccount.swiftBic,
+      iban: destinationAccount.iban, routingNumber: destinationAccount.routingNumber,
       paymentInstructions: destinationAccount.paymentInstructions,
     };
 
@@ -1026,7 +1070,37 @@ class ApplicationService {
     await fs.copyFile(pdfPath, localInvoicePath);
     await fs.unlink(pdfPath).catch(() => {});
     const stored = await this._uploadNamed({ path: localInvoicePath, originalname: `${result.invoice.invoiceNo}.pdf`, mimetype: 'application/pdf', _keepOnDisk: false }, `Tuition Folio ${ctx.passport} ${ctx.name}`, application, ctx);
-    const invoice = await prisma.invoice.update({ where: { id: result.invoice.id }, data: { status: 'ISSUED', pdfUrl: stored.fileUrl, issuedAt: new Date(), issuedById: userId, generatedByUserId: userId } });
+    const issuedAt = new Date();
+    const invoice = await prisma.$transaction(async (tx) => {
+      // Only the current folio should appear in Documents. Keep superseded rows
+      // as soft-deleted history when a revised tuition folio is generated.
+      await tx.document.updateMany({
+        where: { tenantId, applicationId: id, type: 'TUITION_INVOICE', deletedAt: null },
+        data: { deletedAt: issuedAt, isActive: false },
+      });
+      await tx.document.create({
+        data: {
+          tenantId,
+          studentId: application.studentId,
+          applicationId: id,
+          uploadedById: userId,
+          type: 'TUITION_INVOICE',
+          status: 'UPLOADED',
+          originalName: `${result.invoice.invoiceNo}.pdf`,
+          fileName: `${result.invoice.invoiceNo}.pdf`,
+          fileUrl: stored.fileUrl,
+          mimeType: 'application/pdf',
+          publicId: stored.publicId,
+          fileSource: stored.publicId ? 'google_drive' : 'local',
+          documentStage: 'tuition',
+          notes: `Generated tuition folio ${result.invoice.invoiceNo}`,
+        },
+      });
+      return tx.invoice.update({
+        where: { id: result.invoice.id },
+        data: { status: 'ISSUED', pdfUrl: stored.fileUrl, issuedAt, issuedById: userId, generatedByUserId: userId },
+      });
+    });
     const updated = await prisma.application.update({ where: { id }, data: { tuitionInvoiceIssuedAt: new Date(), tuitionInvoiceIssuedById: userId }, include: this._detailInclude() });
 
     try {

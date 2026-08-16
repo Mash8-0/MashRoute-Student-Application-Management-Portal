@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit, Send, Loader2, Wifi, CheckCircle2, Clock,
-  Upload, FileText, CreditCard, ShieldCheck, Receipt, ChevronDown,
-  Download, Eye, Trash2, AlertCircle, TrendingUp, X, PlaneLanding, XCircle, Wallet, Mail,
+  Upload, FileText, CreditCard, ChevronDown,
+  Download, Eye, Trash2, AlertCircle, TrendingUp, X, PlaneLanding, Wallet, Mail,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { applicationAPI, documentAPI, loeAPI } from '../../api/endpoints';
@@ -11,7 +11,6 @@ import LOEActions from '../../components/loe/LOEActions';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import ArrivalCard from '../../components/documents/ArrivalCard';
 import EmgsPaymentSetupModal from '../../components/payments/EmgsPaymentSetupModal';
-import TuitionPaymentDecisionModal from '../../components/payments/TuitionPaymentDecisionModal';
 import { STAGES } from '../../lib/documentStages';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/toast';
@@ -442,7 +441,6 @@ export default function ApplicationDetail() {
   const [emailPreview, setEmailPreview] = useState(null);
   const [emailPreviewWidth, setEmailPreviewWidth] = useState('desktop');
   const [showEmgsPaymentSetup, setShowEmgsPaymentSetup] = useState(false);
-  const [showTuitionPaymentDecision, setShowTuitionPaymentDecision] = useState(false);
 
   const isAdmin = ADMIN_ROLES.includes(user?.role);
   const isEmgsStage = application?.invoiceIssuedAt;
@@ -638,37 +636,6 @@ export default function ApplicationDetail() {
     }
   };
 
-  const handleVerifyTuition = async () => {
-    if (!window.confirm('Mark tuition payment as verified and generate invoice?')) return;
-    setProcessing(true);
-    try {
-      const res = await applicationAPI.verifyTuition(id, { action: 'verify' });
-      setApplication(res.data.data);
-      await fetchApplication(true);
-      toast.success('Tuition payment verified');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to verify tuition payment');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleRejectTuition = async () => {
-    const remarks = window.prompt('Reason for rejection / correction required:');
-    if (remarks === null) return; // cancelled
-    setProcessing(true);
-    try {
-      const res = await applicationAPI.verifyTuition(id, { action: 'reject', remarks: remarks.trim() });
-      setApplication(res.data.data);
-      await fetchApplication(true);
-      toast.success('Tuition payment rejected — correction requested');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to reject tuition payment');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const handleCommissionStatus = async (status) => {
     const verb = status === 'PAID' ? 'paid' : 'eligible';
     if (!window.confirm(`Mark commission as ${verb}? This notifies the agent/staff via WhatsApp (if enabled).`)) return;
@@ -710,7 +677,6 @@ export default function ApplicationDetail() {
       setApplication(res.data.data);
       await fetchApplication(true);
       toast.success('eVisa uploaded');
-      if (ADMIN_ROLES.includes(user?.role)) setShowTuitionPaymentDecision(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
@@ -736,26 +702,6 @@ export default function ApplicationDetail() {
       setProcessing(false);
     }
   };
-
-  const handleUploadTuitionProof = async (file) => {
-    if (!file) { toast.error('Please select a file'); return; }
-    setProcessing(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await applicationAPI.uploadTuitionProof(id, fd);
-      setApplication(res.data.data);
-      await fetchApplication(true);
-      toast.success('Tuition payment proof uploaded');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const openTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment&tuitionApp=${app.id}`);
-  const viewTuitionInPaymentTab = () => navigate(`/students/${app.student?.id || app.studentId}?tab=payment`);
 
   const handleUploadFlightTicket = async (file) => {
     if (!file) { toast.error('Please select a file'); return; }
@@ -844,9 +790,6 @@ export default function ApplicationDetail() {
     app.tuitionVerificationStatus && app.tuitionVerificationStatus !== 'NONE'
       ? app.tuitionVerificationStatus
       : app.tuitionVerifiedAt ? 'VERIFIED' : app.tuitionProofUrl ? 'PENDING' : 'NONE';
-  const tuitionPayment = app.payments?.find((payment) => payment.paymentType === 'TUITION');
-  const tuitionInvoice = tuitionPayment?.Invoice?.[0];
-  const tuitionRequest = tuitionPayment?.InvoiceRequest?.find((request) => request.requestStatus === 'REQUESTED');
 
   // Logical gating: which stage can be reached next, and what (if anything) blocks it.
   const nextPostEvalStage = POST_EVAL_STAGES[postIdx + 1] || null;
@@ -876,7 +819,6 @@ export default function ApplicationDetail() {
     { key: 'eval', label: 'eVAL Approval Letter', url: app.evalApprovalUrl, at: app.evalApprovalUploadedAt, replace: (f) => handleUploadApproval('eval', f) },
     { key: 'evisa', label: 'eVisa', url: app.evisaUrl, at: app.evisaUploadedAt, by: app.evisaUploadedBy, replace: handleUploadEvisa },
     { key: 'flight', label: 'Flight Ticket', url: app.flightTicketUrl, replace: handleUploadFlightTicket },
-    { key: 'tuition', label: 'Tuition Payment Proof', url: app.tuitionProofUrl, at: app.tuitionProofUploadedAt, by: app.tuitionProofUploadedBy, replace: handleUploadTuitionProof },
   ].filter((d) => d.url);
 
   return (
@@ -886,13 +828,6 @@ export default function ApplicationDetail() {
           application={application}
           onClose={() => setShowEmgsPaymentSetup(false)}
           onConfigured={() => fetchApplication(true)}
-        />
-      )}
-      {showTuitionPaymentDecision && application && (
-        <TuitionPaymentDecisionModal
-          application={application}
-          onClose={() => setShowTuitionPaymentDecision(false)}
-          onOpenPayment={openTuitionInPaymentTab}
         />
       )}
       {emailPreview && (
@@ -1465,139 +1400,6 @@ export default function ApplicationDetail() {
               </motion.div>
             )}
 
-          {/* Tuition Payment (Under Arrival) */}
-          {postEvalActive && showArrival && (
-            <motion.div
-              key="tuition"
-              layout
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-            >
-            <SectionCard title="Tuition Payment" icon={Receipt}>
-              <div className="mb-4 space-y-3">
-                {tuitionInvoice?.pdfUrl ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                    <div><p className="text-sm font-semibold text-emerald-800">Tuition payment open</p><p className="text-xs text-emerald-700">{tuitionInvoice.currency} {Number(tuitionInvoice.grandTotal || tuitionInvoice.amount).toLocaleString()} · Due {formatDate(tuitionInvoice.dueDate)}</p></div>
-                    <a href={tuitionInvoice.pdfUrl} target="_blank" rel="noopener noreferrer"><Button size="sm" variant="outline"><Download className="h-3.5 w-3.5" /> View Folio PDF</Button></a>
-                  </div>
-                ) : isAdmin ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
-                    <div><p className="text-sm font-semibold">{tuitionRequest ? 'Tuition payment requested' : 'Open tuition payment'}</p><p className="text-xs text-muted-foreground">Generate the payment folio after confirming the fee and due date.</p></div>
-                    <Button size="sm" onClick={openTuitionInPaymentTab} disabled={!app.evisaUrl}><Receipt className="h-3.5 w-3.5" /> Open Tuition Fees Payment &amp; Generate Tuition Fees Folio</Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <div><p className="text-sm font-semibold text-amber-800">{tuitionRequest ? 'Request awaiting admin' : 'Tuition payment is not open'}</p><p className="text-xs text-amber-700">Ask an admin to configure the tuition fee and issue the folio.</p></div>
-                    {!tuitionRequest && <Button size="sm" variant="outline" onClick={viewTuitionInPaymentTab} disabled={!app.evisaUrl}>Request Tuition Payment</Button>}
-                  </div>
-                )}
-              </div>
-              {app.tuitionProofUrl ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50">
-                        <Receipt className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Tuition Payment Proof</p>
-                        <p className="text-xs text-muted-foreground">
-                          Uploaded {app.tuitionProofUploadedAt ? formatDate(app.tuitionProofUploadedAt) : ''}
-                          {app.tuitionProofUploadedBy ? ` · ${app.tuitionProofUploadedBy.firstName} ${app.tuitionProofUploadedBy.lastName}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setPreviewFile({ url: app.tuitionProofUrl, label: 'Tuition Payment Proof' })}>
-                      <Eye className="h-3.5 w-3.5" /> View
-                    </Button>
-                  </div>
-
-                  {/* Verification status */}
-                  {tuitionStatus === 'VERIFIED' && (
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Verified
-                        </span>
-                        <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                          <Receipt className="h-3.5 w-3.5" /> Invoice Generated
-                        </span>
-                      </div>
-                      {app.tuitionVerifiedBy && (
-                        <p className="text-[11px] text-muted-foreground">
-                          Verified by {app.tuitionVerifiedBy.firstName} {app.tuitionVerifiedBy.lastName}
-                          {app.tuitionVerifiedAt ? ` · ${formatDate(app.tuitionVerifiedAt)}` : ''}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {tuitionStatus === 'REJECTED' && (
-                    <div className="space-y-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                        <XCircle className="h-3.5 w-3.5" /> Rejected — Correction Required
-                      </span>
-                      {app.tuitionVerificationRemarks && (
-                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                          <span className="font-semibold">Admin remarks:</span> {app.tuitionVerificationRemarks}
-                        </div>
-                      )}
-                      {canUpload && (
-                        <>
-                          <input id="tuition-reupload-input" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
-                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUploadTuitionProof(f); }} />
-                          <Button size="sm" onClick={() => document.getElementById('tuition-reupload-input').click()} disabled={processing}>
-                            {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                            Upload Corrected Proof
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {tuitionStatus === 'PENDING' && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-                        <Clock className="h-3.5 w-3.5" /> Pending Admin Verification
-                      </span>
-                      {isAdmin && (
-                        <>
-                          <Button size="sm" variant="outline" onClick={handleVerifyTuition} disabled={processing}
-                            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50">
-                            {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                            Verify
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={handleRejectTuition} disabled={processing}
-                            className="border-red-200 text-red-600 hover:bg-red-50">
-                            <XCircle className="h-3.5 w-3.5" /> Reject
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : canUpload && tuitionInvoice?.pdfUrl ? (
-                <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
-                  <Receipt className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground mb-3">No tuition payment proof uploaded yet</p>
-                  <input id="tuition-proof-input" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUploadTuitionProof(f); }} />
-                  <Button size="sm" onClick={() => document.getElementById('tuition-proof-input').click()} disabled={processing}>
-                    {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                    Upload Tuition Payment Proof
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-700">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  Tuition payment proof not yet uploaded
-                </div>
-              )}
-            </SectionCard>
-            </motion.div>
-          )}
           </AnimatePresence>
 
           {/* Status Timeline */}

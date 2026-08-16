@@ -4,7 +4,7 @@ import { ArrowLeft, Edit, Plus, FileText, Loader2, Trash2, Receipt, CheckCircle2
 import DocumentUploadSection from '../../components/documents/DocumentUploadSection';
 import DocumentTimeline from '../../components/documents/DocumentTimeline';
 import EmgsPaymentCard from '../../components/payments/EmgsPaymentCard';
-import TuitionPaymentSetupModal from '../../components/payments/TuitionPaymentSetupModal';
+import ApplicationPaymentSections from '../../components/payments/ApplicationPaymentSections';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import { studentAPI, applicationAPI, documentAPI, userAPI } from '../../api/endpoints';
 import { useAuthStore } from '../../store/authStore';
@@ -44,86 +44,25 @@ function AcademicRow({ label, institution, grade, year }) {
 export default function StudentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuthStore();
   const [student, setStudent] = useState(null);
   const [applications, setApplications] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'payment' ? 'payment' : 'overview');
-  const [tuitionSetupApp, setTuitionSetupApp] = useState(null);
+  const [selectedPaymentApplicationId, setSelectedPaymentApplicationId] = useState(searchParams.get('tuitionApp') || '');
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
   const [staff, setStaff] = useState([]);
   const [transferTo, setTransferTo] = useState('');
   const [transferring, setTransferring] = useState(false);
-  const [paymentAction, setPaymentAction] = useState(null);
 
   const canEdit = ['TENANT_ADMIN', 'STAFF', 'SUPER_ADMIN'].includes(user?.role);
   const canDelete = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canTransfer = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
   const canVerifyPayment = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
-  const canRequestTuition = ['STAFF', 'REGISTERED_AGENT'].includes(user?.role);
-
-  useEffect(() => {
-    const requestedId = searchParams.get('tuitionApp');
-    if (!requestedId || !canVerifyPayment || !applications.length) return;
-    const match = applications.find((row) => row.id === requestedId);
-    if (match) {
-      setActiveTab('payment');
-      setTuitionSetupApp({ ...match, student });
-    }
-  }, [applications, canVerifyPayment, searchParams, student]);
-
-  const closeTuitionSetup = () => {
-    setTuitionSetupApp(null);
-    const next = new URLSearchParams(searchParams);
-    next.delete('tuitionApp');
-    next.set('tab', 'payment');
-    setSearchParams(next, { replace: true });
-  };
-
-  const requestTuitionPayment = async (applicationId) => {
-    setPaymentAction(`tuition-request-${applicationId}`);
-    try {
-      await applicationAPI.requestTuitionPayment(applicationId, 'Requested from the student Payment tab');
-      toast.success('Tuition payment request sent to admin');
-      await fetchAll();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to request tuition payment');
-    } finally { setPaymentAction(null); }
-  };
-
-  const handlePaymentProofUpload = async (applicationId, file) => {
-    if (!file) return;
-    setPaymentAction(`upload-${applicationId}`);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      await applicationAPI.uploadPaymentProof(applicationId, form);
-      toast.success('Payment proof uploaded');
-      await fetchAll();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Payment proof upload failed');
-    } finally {
-      setPaymentAction(null);
-    }
-  };
-
-  const handlePaymentVerification = async (applicationId) => {
-    if (!confirm('Verify this payment proof?')) return;
-    setPaymentAction(`verify-${applicationId}`);
-    try {
-      await applicationAPI.verifyPayment(applicationId);
-      toast.success('Payment verified');
-      await fetchAll();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Payment verification failed');
-    } finally {
-      setPaymentAction(null);
-    }
-  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -159,6 +98,10 @@ export default function StudentDetail() {
   }, [id, navigate]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    if (!applications.length) return;
+    if (!applications.some((row) => row.id === selectedPaymentApplicationId)) setSelectedPaymentApplicationId(applications[0].id);
+  }, [applications, selectedPaymentApplicationId]);
 
   useEffect(() => {
     if (!canTransfer) return;
@@ -497,25 +440,17 @@ export default function StudentDetail() {
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">No applications yet.</CardContent>
             </Card>
-          ) : (
-            applications.map((app) => <div key={app.id} className="space-y-2">
+          ) : (() => {
+            const app = applications.find((row) => row.id === selectedPaymentApplicationId) || applications[0];
+            return <div className="space-y-4">
+              <Card><CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+                <div className="min-w-0 flex-1"><p className="text-xs font-medium text-muted-foreground">Application payment ledger</p><select className="mt-1 h-10 w-full max-w-xl rounded-lg border border-input bg-background px-3 text-sm font-semibold" value={app.id} onChange={(event) => setSelectedPaymentApplicationId(event.target.value)}>{applications.map((row) => <option key={row.id} value={row.id}>{row.university?.name || 'University'} · {row.referenceNo} · {row.program || 'Programme'} · {row.intake || 'Intake'}</option>)}</select><p className="mt-2 text-xs text-muted-foreground">{app.campus || 'Campus not specified'} · {app.status} · Offer Letter {app.offerLetterUrl ? 'Issued' : 'Pending'}</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => navigate(`/applications/${app.id}`)}>View Application</Button>{canVerifyPayment && <Button size="sm" variant="outline" onClick={() => navigate('/settings?section=payment-accounts')}>Payment Settings</Button>}</div>
+              </CardContent></Card>
               <EmgsPaymentCard application={app} canVerify={canVerifyPayment} onChanged={fetchAll} />
-              {canVerifyPayment && app.evisaUrl && !app.tuitionInvoiceIssuedAt && (
-                <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div><p className="text-sm font-semibold">Tuition Fees Payment</p><p className="text-xs text-muted-foreground">Open payment and generate the tuition fees folio from this Payment tab.</p></div>
-                  <Button onClick={() => setTuitionSetupApp({ ...app, student })}><Receipt className="h-4 w-4" /> Open Tuition Fees Payment &amp; Generate Tuition Fees Folio</Button>
-                </CardContent></Card>
-              )}
-              {canRequestTuition && app.evisaUrl && !app.tuitionInvoiceIssuedAt && (
-                <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div><p className="text-sm font-semibold">Tuition Fees Payment</p><p className="text-xs text-muted-foreground">Request an admin to open the tuition payment and generate its folio.</p></div>
-                  <Button variant="outline" disabled={paymentAction === `tuition-request-${app.id}`} onClick={() => requestTuitionPayment(app.id)}>
-                    {paymentAction === `tuition-request-${app.id}` && <Loader2 className="h-4 w-4 animate-spin" />} Request Tuition Payment
-                  </Button>
-                </CardContent></Card>
-              )}
-            </div>)
-            /* Legacy payment card retained below only for source history.
+              <ApplicationPaymentSections application={app} canManage={canVerifyPayment} />
+            </div>;
+          })()}
+            {/* Legacy payment card retained below only for source history.
             applications.map((app) => {
               const paymentDone = !!app.paymentProofUrl;
               const verified = !!app.paymentVerifiedAt;
@@ -621,14 +556,11 @@ export default function StudentDetail() {
                   </CardContent>
                 </Card>
               );
-            }) */
-          )}
+            }) */}
         </div>
       )}
 
       {/* ── Documents Tab ── */}
-      {tuitionSetupApp && <TuitionPaymentSetupModal application={tuitionSetupApp} onClose={closeTuitionSetup} onConfigured={fetchAll} />}
-
       {activeTab === 'documents' && (
         <div className="space-y-4">
           <DocumentTimeline

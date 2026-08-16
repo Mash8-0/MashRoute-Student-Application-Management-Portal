@@ -75,6 +75,8 @@ function snapshot(account, universityName) {
     currency: account.currency,
     branchName: account.branchName,
     swiftBic: account.swiftBic,
+    iban: account.iban,
+    routingNumber: account.routingNumber,
     paymentInstructions: account.paymentInstructions,
     universityName: universityName || null,
     capturedAt: new Date().toISOString(),
@@ -296,13 +298,14 @@ async function amendFee(id, tenantId, actorId, data) {
 
 async function summary(applicationId, tenantId, includeProtected = false) {
   const app = await applicationForTenant(applicationId, tenantId);
-  const [ledger, fees, transactions, receipts, reversals, tasks] = await Promise.all([
+  const [ledger, fees, transactions, receipts, reversals, tasks, invoices] = await Promise.all([
     prisma.applicationPaymentAccount.findUnique({ where: { applicationId } }),
     prisma.emgsFeeItem.findMany({ where: { tenantId, applicationId }, orderBy: { createdAt: 'desc' } }),
     prisma.emgsPaymentTransaction.findMany({ where: { tenantId, applicationId }, orderBy: { createdAt: 'desc' } }),
     prisma.emgsPaymentReceipt.findMany({ where: { tenantId, applicationId }, orderBy: { createdAt: 'desc' } }),
     prisma.emgsPaymentReversal.findMany({ where: { tenantId, applicationId }, orderBy: { createdAt: 'desc' } }),
     prisma.paymentWorkflowTask.findMany({ where: { tenantId, applicationId, status: 'PENDING' } }),
+    prisma.invoice.findMany({ where: { tenantId, applicationId, invoiceType: 'EMGS', status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' } }),
   ]);
   const auditHistory = await prisma.financialAuditLog.findMany({ where: { tenantId, entityId: { in: [applicationId, ...fees.map((f) => f.id), ...transactions.map((t) => t.id)] } }, orderBy: { createdAt: 'desc' }, take: 100 });
   const byCurrency = {};
@@ -334,7 +337,12 @@ async function summary(applicationId, tenantId, includeProtected = false) {
       university: app.university, program: app.program,
     },
     ledger, totals, fees: fees.map((f) => ({ ...f, destinationSnapshot: sanitizeSnapshot(f.destinationSnapshot) })),
-    transactions: transactions.map((t) => ({ ...t, destinationSnapshot: sanitizeSnapshot(t.destinationSnapshot) })), receipts, reversals, tasks, auditHistory,
+    transactions: transactions.map((t) => ({ ...t, destinationSnapshot: sanitizeSnapshot(t.destinationSnapshot) })),
+    receipts,
+    reversals,
+    tasks,
+    invoices: invoices.map((invoice) => ({ ...invoice, paymentAccountSnapshot: sanitizeSnapshot(invoice.paymentAccountSnapshot) })),
+    auditHistory,
   };
 }
 

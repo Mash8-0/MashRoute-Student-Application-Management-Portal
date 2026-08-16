@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 
 const money = (amount, currency = 'MYR') => {
@@ -27,6 +28,21 @@ function tenantBankDetails(tenant) {
 
 function textOrDash(value) {
   return value ? String(value) : '-';
+}
+
+function revealProtectedAccountNumber(value) {
+  if (!String(value || '').startsWith('v1:')) return String(value || '');
+  try {
+    const secret = process.env.PAYMENT_ACCOUNT_ENCRYPTION_KEY;
+    if (!secret || secret.length < 32) return '';
+    const [, iv, tag, payload] = value.split(':');
+    const key = crypto.createHash('sha256').update(secret).digest();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(payload, 'base64')), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
 }
 
 function drawLabelRows(doc, rows, x, y, labelWidth, valueWidth, rowHeight = 24) {
@@ -150,18 +166,28 @@ async function generateInvoicePdf({ invoice, payment, application, tenant }) {
   });
   doc.roundedRect(tableX, y, tableW, 34 + items.length * rowH, 6).strokeColor(line).lineWidth(1).stroke();
 
-  y = 720;
-  doc.roundedRect(45, y, 235, 86, 6).strokeColor(line).lineWidth(1).stroke();
+  // Keep the payment and totals blocks comfortably above the footer so PDFKit
+  // never creates a second page for the final footer line.
+  y = 650;
+  doc.roundedRect(45, y, 250, 132, 6).strokeColor(line).lineWidth(1).stroke();
   doc.roundedRect(62, y + 24, 24, 24, 5).fill('#f0e7ff');
   const account = invoice.paymentAccountSnapshot && typeof invoice.paymentAccountSnapshot === 'object' ? invoice.paymentAccountSnapshot : null;
-  const accountText = account
-    ? `${account.bankName || ''} · ${account.accountHolderName || ''}\nAccount: ${account.maskedAccountNumber || '-'}${account.swiftBic ? ` · SWIFT: ${account.swiftBic}` : ''}`
-    : (invoice.notes || 'Please make payment before the due date and send payment proof through the MashRoute portal.');
+  const fullAccountNumber = account ? revealProtectedAccountNumber(account.protectedAccountNumber) : '';
+  const accountText = account ? [
+    `Bank: ${account.bankName || '-'}`,
+    `Account name: ${account.accountHolderName || '-'}`,
+    `Account number: ${fullAccountNumber || account.accountNumber || account.maskedAccountNumber || '-'}`,
+    account.branchName && `Branch: ${account.branchName}`,
+    account.swiftBic && `SWIFT/BIC: ${account.swiftBic}`,
+    account.iban && `IBAN: ${account.iban}`,
+    account.routingNumber && `Routing number: ${account.routingNumber}`,
+    account.currency && `Currency: ${account.currency}`,
+  ].filter(Boolean).join('\n') : (invoice.notes || 'Please make payment before the due date and send payment proof through the MashRoute portal.');
   doc.fillColor(purple).font('Helvetica-Bold').fontSize(11).text(account ? 'PAYMENT ACCOUNT' : 'NOTES', 100, y + 22);
-  doc.fillColor(text).font('Helvetica').fontSize(9)
-    .text(accountText, 100, y + 38, { width: 150, lineGap: 1 });
+  doc.fillColor(text).font('Helvetica').fontSize(8)
+    .text(accountText, 62, y + 42, { width: 216, height: 84, lineGap: 0.5 });
 
-  doc.roundedRect(305, y, 245, 86, 6).strokeColor(line).lineWidth(1).stroke();
+  doc.roundedRect(305, y, 245, 132, 6).strokeColor(line).lineWidth(1).stroke();
   const sstLabel = Number(sstRate || 0).toFixed(2).replace(/\.00$/, '');
   doc.fillColor(text).font('Helvetica').fontSize(11)
     .text('Subtotal', 320, y + 14).text(money(subtotal, currency), 440, y + 14, { width: 90, align: 'right' });
@@ -170,9 +196,9 @@ async function generateInvoicePdf({ invoice, payment, application, tenant }) {
   doc.fillColor(purple).font('Helvetica-Bold').fontSize(13).text('GRAND TOTAL', 320, y + 68);
   doc.fillColor(blue).font('Helvetica-Bold').fontSize(18).text(money(grandTotal, currency), 410, y + 64, { width: 120, align: 'right' });
 
-  const footer = invoice.footerNote || 'This is auto generated from the system || No signature Required\nAll copyright to MashRoute';
-  doc.fillColor('#111827').font('Helvetica-Oblique').fontSize(11)
-    .text(footer, 60, 814, { width: 475, align: 'center', lineGap: 8, characterSpacing: 2 });
+  const footer = invoice.footerNote || 'This is auto generated from the system || No signature Required';
+  doc.fillColor('#111827').font('Helvetica-Oblique').fontSize(9.5)
+    .text(footer, 60, 798, { width: 475, height: 28, align: 'center', lineGap: 2, characterSpacing: 1.4, ellipsis: true });
 
   doc.end();
 
