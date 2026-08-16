@@ -13,6 +13,7 @@ const { sendWhatsAppTemplate, isConfigured, normalizePhone } = require('./whatsa
 // WhatsApp templates in Meta Business Manager. Body params map to {{1}}, {{2}}…
 const EVENTS = {
   application_created: { label: 'New application created', vars: (c) => [c.studentName, c.referenceNo, c.universityName] },
+  application_status_updated: { label: 'Application status updated', vars: (c) => [c.studentName, c.referenceNo, c.status] },
   offer_letter_uploaded: { label: 'Offer letter uploaded', vars: (c) => [c.studentName, c.referenceNo, c.universityName] },
   payment_proof_uploaded: { label: 'Payment proof uploaded', vars: (c) => [c.studentName, c.referenceNo] },
   payment_verified: { label: 'Payment verified', vars: (c) => [c.studentName, c.referenceNo] },
@@ -106,6 +107,7 @@ async function notifyEvent(event, application, extra = {}) {
     referenceNo: application.referenceNo,
     universityName: application.university?.name || extra.universityName || 'University',
     agencyName: tenant.name,
+    status: extra.status,
     arrivalDate: extra.arrivalDate,
     commission: extra.commission,
   };

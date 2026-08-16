@@ -37,7 +37,10 @@ Thumbs.db
 # IDE
 .vscode/settings.json
 .idea/
+.claude/
 
 # Logs
 *.log
+logs/
+**/logs/
 npm-debug.log*

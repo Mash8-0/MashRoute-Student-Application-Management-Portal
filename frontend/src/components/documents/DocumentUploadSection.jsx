@@ -47,25 +47,45 @@ const REQUIRED_DOCS = [
     accept: '.pdf,.jpg,.jpeg,.png',
     acceptLabel: 'PDF, JPG, PNG',
     required: false,
+    legacy: true,
   },
 ];
 
-const REQUIRED_TYPES = REQUIRED_DOCS.filter(d => d.required).map(d => d.type);
+const BASE_DOCS = REQUIRED_DOCS.filter(d => !d.legacy);
+const REQUIRED_TYPES = BASE_DOCS.filter(d => d.required).map(d => d.type);
 
-// Conditional document — only offered when the student has MOI (Medium of
-// Instruction) selected on their profile. Optional, so it never counts toward
-// the required-document completion total.
-const MOI_DOC = {
-  type: 'MOI_CERTIFICATE',
-  title: 'MOI Certificate',
-  description: 'Medium of Instruction certificate confirming English-taught study',
-  accept: '.pdf,.jpg,.jpeg,.png',
-  acceptLabel: 'PDF, JPG, PNG',
-  required: false,
+const ENGLISH_CERT_DOCS = {
+  IELTS: {
+    type: 'IELTS_CERTIFICATE',
+    title: 'IELTS Certificate',
+    description: 'Upload IELTS Certificate',
+    accept: '.pdf,.jpg,.jpeg,.png',
+    acceptLabel: 'PDF, JPG, PNG',
+    required: false,
+  },
+  PTE: {
+    type: 'PTE_CERTIFICATE',
+    title: 'PTE Certificate',
+    description: 'Upload PTE Certificate',
+    accept: '.pdf,.jpg,.jpeg,.png',
+    acceptLabel: 'PDF, JPG, PNG',
+    required: false,
+  },
+  MOI: {
+    type: 'MOI_CERTIFICATE',
+    title: 'MOI Certificate',
+    description: 'Upload MOI Certificate',
+    accept: '.pdf,.jpg,.jpeg,.png',
+    acceptLabel: 'PDF, JPG, PNG',
+    required: false,
+  },
 };
 
-// All document definitions we can render with a friendly title (required + conditional).
-const KNOWN_DOCS = [...REQUIRED_DOCS, MOI_DOC];
+function getDocumentDefinitions(englishProficiency) {
+  const normalized = String(englishProficiency || 'NONE').toUpperCase();
+  const englishDoc = ENGLISH_CERT_DOCS[normalized];
+  return englishDoc ? [...BASE_DOCS, englishDoc] : BASE_DOCS;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -268,17 +288,24 @@ function UploadedDocRow({ doc, docDef, canDelete, onDeleted, onPreview }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function DocumentUploadSection({ student, documents, canUpload, canDelete, onRefresh, applicationId, extraDocs = [] }) {
+export default function DocumentUploadSection({
+  student,
+  documents,
+  canUpload,
+  canDelete,
+  onRefresh,
+  applicationId,
+  extraDocs = [],
+  englishProficiency = 'NONE',
+}) {
   const [previewFile, setPreviewFile] = useState(null);
 
+  const documentDefinitions = getDocumentDefinitions(englishProficiency);
+  const definitionTypes = new Set(documentDefinitions.map(d => d.type));
   const uploadedTypes = new Set(documents.map(d => d.type));
-  // Offer the MOI certificate upload only when the student profile has MOI selected.
-  const uploadCandidates = student?.hasMOI ? KNOWN_DOCS : REQUIRED_DOCS;
-  const missingDocs   = uploadCandidates.filter(d => !uploadedTypes.has(d.type));
-  // Always render an already-uploaded MOI with its proper title, even if the
-  // profile's MOI flag is later toggled off.
-  const uploadedDocs  = KNOWN_DOCS.filter(d => uploadedTypes.has(d.type));
-  const otherDocs     = documents.filter(d => !KNOWN_DOCS.find(r => r.type === d.type));
+  const missingDocs   = documentDefinitions.filter(d => !uploadedTypes.has(d.type));
+  const uploadedDocs  = documentDefinitions.filter(d => uploadedTypes.has(d.type));
+  const otherDocs     = documents.filter(d => !definitionTypes.has(d.type));
 
   const uploadedRequired  = REQUIRED_TYPES.filter(t => uploadedTypes.has(t)).length;
   const totalRequired     = REQUIRED_TYPES.length;

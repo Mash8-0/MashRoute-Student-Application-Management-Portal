@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Plus, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { studentAPI } from '../../api/endpoints';
+import { studentAPI, agentAPI, userAPI } from '../../api/endpoints';
 import { toast } from '../../components/ui/toast';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -12,62 +12,64 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 
 const COUNTRIES = ['Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina','Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia','Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia','Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','DR Congo','Denmark','Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama','Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe','Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe'];
 
+const asString = (schema) => z.preprocess((value) => (value == null ? '' : value), schema);
+const optionalString = asString(z.string().optional());
+const optionalEmail = asString(z.string().email('Invalid email').optional().or(z.literal('')));
+
 const schema = z.object({
-  fullName: z.string().min(2, 'Full name is required'),
-  passportNumber: z.string()
-    .trim()
-    .regex(/^[A-Za-z0-9][A-Za-z0-9\s-]{2,29}$/, 'Invalid passport number')
-    .optional()
-    .or(z.literal('')),
-  nationality: z.string().optional(),
-  dateOfBirth: z.string().optional(),
-  gender: z.string().optional(),
-  email: z.string().email('Invalid email').optional().or(z.literal('')),
-  phone: z.string()
-    .trim()
-    .regex(/^\+?[0-9().\-\s]{5,30}$/, 'Invalid phone number')
-    .optional()
-    .or(z.literal('')),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  country: z.string().optional(),
-  emergencyContact: z.string().optional(),
-  emergencyPhone: z.string().optional(),
-  sponsorName: z.string().optional(),
-  sponsorContact: z.string().optional(),
+  fullName: asString(z.string().min(2, 'Full name is required')),
+  passportNumber: optionalString,
+  nationality: optionalString,
+  dateOfBirth: optionalString,
+  gender: optionalString,
+  email: optionalEmail,
+  phone: optionalString,
+  address: optionalString,
+  city: optionalString,
+  country: optionalString,
+  emergencyContact: optionalString,
+  emergencyPhone: optionalString,
+  sponsorName: optionalString,
+  sponsorContact: optionalString,
   // Academic — SSC
-  sscInstitution: z.string().optional(),
-  sscGrade: z.string().optional(),
-  sscYear: z.string().optional(),
+  sscInstitution: optionalString,
+  sscGrade: optionalString,
+  sscYear: optionalString,
   // Academic — HSC
-  hscInstitution: z.string().optional(),
-  hscGrade: z.string().optional(),
-  hscYear: z.string().optional(),
+  hscInstitution: optionalString,
+  hscGrade: optionalString,
+  hscYear: optionalString,
   // Academic — Diploma
-  diplomaInstitution: z.string().optional(),
-  diplomaGrade: z.string().optional(),
-  diplomaYear: z.string().optional(),
+  diplomaInstitution: optionalString,
+  diplomaGrade: optionalString,
+  diplomaYear: optionalString,
   // Academic — Bachelor
-  bachelorInstitution: z.string().optional(),
-  bachelorGrade: z.string().optional(),
-  bachelorYear: z.string().optional(),
+  bachelorInstitution: optionalString,
+  bachelorGrade: optionalString,
+  bachelorYear: optionalString,
   // Academic — Masters
-  mastersInstitution: z.string().optional(),
-  mastersGrade: z.string().optional(),
-  mastersYear: z.string().optional(),
+  mastersInstitution: optionalString,
+  mastersGrade: optionalString,
+  mastersYear: optionalString,
   // Academic — PhD
-  phdInstitution: z.string().optional(),
-  phdGrade: z.string().optional(),
-  phdYear: z.string().optional(),
+  phdInstitution: optionalString,
+  phdGrade: optionalString,
+  phdYear: optionalString,
   // GPA
-  gpa: z.string().optional(),
+  gpa: optionalString,
   // English
+  englishProficiency: z.enum(['IELTS', 'PTE', 'MOI', 'NONE']).optional(),
   hasIELTS: z.boolean().optional(),
-  ieltsScore: z.string().optional(),
-  ieltsExpiry: z.string().optional(),
+  ieltsScore: optionalString,
+  ieltsExpiry: optionalString,
   hasPTE: z.boolean().optional(),
-  pteScore: z.string().optional(),
+  pteScore: optionalString,
   hasMOI: z.boolean().optional(),
+  sourceType: z.enum(['DIRECT_STUDENT','REGISTERED_AGENT','MANAGED_AGENT','REFERRAL_PARTNER']),
+  sourceAgentId: optionalString,
+  assignedStaffId: optionalString,
+}).superRefine((data, ctx) => {
+  if (data.sourceType !== 'DIRECT_STUDENT' && !data.sourceAgentId) ctx.addIssue({ code: 'custom', path: ['sourceAgentId'], message: 'Select Agent is required' });
 });
 
 function Field({ label, error, children, required }) {
@@ -91,6 +93,31 @@ function SectionHeading({ children }) {
 }
 
 const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const ENGLISH_PROFICIENCY_OPTIONS = [
+  { value: 'NONE', label: 'None / Not Available' },
+  { value: 'IELTS', label: 'IELTS' },
+  { value: 'PTE', label: 'PTE' },
+  { value: 'MOI', label: 'MOI' },
+];
+
+function inferEnglishProficiency(student = {}) {
+  if (student.hasIELTS) return 'IELTS';
+  if (student.hasPTE) return 'PTE';
+  if (student.hasMOI) return 'MOI';
+  return 'NONE';
+}
+
+const ERROR_LABELS = {
+  fullName: 'Full Name',
+  email: 'Email',
+  englishProficiency: 'English Proficiency',
+};
+
+function getFirstFormError(errors) {
+  const [field, error] = Object.entries(errors)[0] || [];
+  if (!field) return 'Please check the form and try again';
+  return error?.message || `${ERROR_LABELS[field] || field} is invalid`;
+}
 
 export default function StudentForm() {
   const { id } = useParams();
@@ -101,28 +128,30 @@ export default function StudentForm() {
   const [saveError, setSaveError] = useState('');
   const savingRef = useRef(false);
 
-  const { register, handleSubmit, reset, watch, setFocus, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { hasIELTS: false, hasPTE: false, hasMOI: false },
+    defaultValues: { englishProficiency: 'NONE', hasIELTS: false, hasPTE: false, hasMOI: false, sourceType: 'DIRECT_STUDENT', sourceAgentId: '', assignedStaffId: '' },
   });
+  const [agents, setAgents] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAgent, setQuickAgent] = useState({ displayName: '', agencyName: '', contactPerson: '', email: '', phone: '', whatsapp: '', address: '', notes: '' });
+  const sourceType = watch('sourceType') || 'DIRECT_STUDENT';
+  const sourceAgentId = watch('sourceAgentId');
 
-  const hasIELTS = watch('hasIELTS');
-  const hasPTE = watch('hasPTE');
-  const actionLabel = isEdit ? 'Update Student' : 'Create Student';
-  const savingLabel = isEdit ? 'Updating Student...' : 'Creating Student...';
+  const englishProficiency = watch('englishProficiency') || 'NONE';
+  const hasIELTS = englishProficiency === 'IELTS';
+  const hasPTE = englishProficiency === 'PTE';
+  const savingLabel = isEdit ? 'Saving...' : 'Creating Student...';
 
   useEffect(() => {
     if (!isEdit) return;
     studentAPI.get(id).then((res) => {
       const s = res.data.data;
-      // The API returns null for empty optional fields, but the zod string
-      // validators reject null ("Expected string, received null"), which would
-      // block every update. Coerce nulls to empty strings before populating.
-      const sanitized = Object.fromEntries(
-        Object.entries(s).map(([k, v]) => [k, v === null ? '' : v])
-      );
       reset({
-        ...sanitized,
+        ...s,
         dateOfBirth: s.dateOfBirth ? s.dateOfBirth.split('T')[0] : '',
         ieltsExpiry: s.ieltsExpiry ? s.ieltsExpiry.split('T')[0] : '',
         sscYear: s.sscYear?.toString() || '',
@@ -134,79 +163,71 @@ export default function StudentForm() {
         gpa: s.gpa?.toString() || '',
         ieltsScore: s.ieltsScore?.toString() || '',
         pteScore: s.pteScore?.toString() || '',
+        englishProficiency: inferEnglishProficiency(s), sourceType: s.sourceType || 'DIRECT_STUDENT', sourceAgentId: s.sourceAgentId || '', assignedStaffId: s.assignedStaffId || '',
         hasIELTS: Boolean(s.hasIELTS),
         hasPTE: Boolean(s.hasPTE),
         hasMOI: Boolean(s.hasMOI),
       });
       setLoading(false);
-    }).catch(() => {
-      toast.error('Student not found');
+    }).catch((err) => {
+      const status = err.response?.status;
+      toast.error(status === 401 ? 'Session expired. Please log in again.' : 'Failed to load student data');
       navigate(-1);
     });
   }, [id, isEdit, reset, navigate]);
 
-  const toOptionalNumber = (value, parser) => {
-    if (value === '' || value === null || value === undefined) return undefined;
-    return parser(value);
-  };
+  useEffect(() => { userAPI.list({ role: 'STAFF', limit: 50 }).then((r) => setStaff(r.data.data || [])).catch(() => setStaff([])); }, []);
+  useEffect(() => {
+    if (sourceType === 'DIRECT_STUDENT') { setValue('sourceAgentId', ''); setAgents([]); return; }
+    const timer = setTimeout(() => { setAgentsLoading(true); agentAPI.list({ type: sourceType, status: 'ACTIVE', search: agentSearch || undefined, limit: 20 }).then((r) => setAgents(r.data.data || [])).catch(() => toast.error('Failed to load matching agents')).finally(() => setAgentsLoading(false)); }, 250);
+    return () => clearTimeout(timer);
+  }, [sourceType, agentSearch, setValue]);
 
-  const normalizePayload = (data) => ({
-    ...data,
-    passportNumber: typeof data.passportNumber === 'string'
-      ? data.passportNumber.trim().toUpperCase()
-      : data.passportNumber,
-    gpa: toOptionalNumber(data.gpa, parseFloat),
-    ieltsScore: toOptionalNumber(data.ieltsScore, parseFloat),
-    pteScore: toOptionalNumber(data.pteScore, (v) => parseInt(v, 10)),
-    sscYear: toOptionalNumber(data.sscYear, (v) => parseInt(v, 10)),
-    hscYear: toOptionalNumber(data.hscYear, (v) => parseInt(v, 10)),
-    diplomaYear: toOptionalNumber(data.diplomaYear, (v) => parseInt(v, 10)),
-    bachelorYear: toOptionalNumber(data.bachelorYear, (v) => parseInt(v, 10)),
-    mastersYear: toOptionalNumber(data.mastersYear, (v) => parseInt(v, 10)),
-    phdYear: toOptionalNumber(data.phdYear, (v) => parseInt(v, 10)),
-  });
-
-  const getSaveMessage = (err) => {
-    const errorData = err.response?.data;
-    if (errorData?.code === 'STUDENT_ALREADY_EXISTS') return 'Student Record Already Exists';
-    if (err.response?.status === 401) return 'Unauthorized action';
-    if (err.response?.status === 403) return 'Unauthorized action';
-    if (err.response?.status === 404) return 'Student not found';
-    if (errorData?.message) return errorData.message;
-    if (err.request && !err.response) return 'Network error';
-    return 'Server error';
+  const createQuickAgent = async () => {
+    if (!quickAgent.displayName.trim()) return toast.error('Agent name is required');
+    try { const r = await agentAPI.create({ ...quickAgent, type: sourceType }); const created = r.data.data; setAgents((old) => [created, ...old]); setValue('sourceAgentId', created.id, { shouldValidate: true }); setShowQuickAdd(false); setQuickAgent({ displayName: '', agencyName: '', contactPerson: '', email: '', phone: '', whatsapp: '', address: '', notes: '' }); toast.success('Agent created'); } catch (e) { toast.error(e.response?.data?.message || 'Failed to create agent'); }
   };
 
   const onSubmit = async (data) => {
     if (savingRef.current) return;
-    if (isEdit && !id) {
-      setSaveError('Missing student ID');
-      toast.error('Missing student ID');
-      return;
-    }
-
     savingRef.current = true;
     setSaveError('');
     setSaving(true);
-    const payload = normalizePayload(data);
+    const payload = {
+      ...data,
+      sourceAgentId: data.sourceType === 'DIRECT_STUDENT' ? null : data.sourceAgentId,
+      assignedStaffId: data.assignedStaffId || null,
+      gpa: data.gpa ? parseFloat(data.gpa) : undefined,
+      englishProficiency: undefined,
+      hasIELTS: data.englishProficiency === 'IELTS',
+      hasPTE: data.englishProficiency === 'PTE',
+      hasMOI: data.englishProficiency === 'MOI',
+      ieltsScore: data.englishProficiency === 'IELTS' && data.ieltsScore ? parseFloat(data.ieltsScore) : undefined,
+      ieltsExpiry: data.englishProficiency === 'IELTS' ? data.ieltsExpiry : undefined,
+      pteScore: data.englishProficiency === 'PTE' && data.pteScore ? parseInt(data.pteScore) : undefined,
+      sscYear: data.sscYear ? parseInt(data.sscYear) : undefined,
+      hscYear: data.hscYear ? parseInt(data.hscYear) : undefined,
+      diplomaYear: data.diplomaYear ? parseInt(data.diplomaYear) : undefined,
+      bachelorYear: data.bachelorYear ? parseInt(data.bachelorYear) : undefined,
+      mastersYear: data.mastersYear ? parseInt(data.mastersYear) : undefined,
+      phdYear: data.phdYear ? parseInt(data.phdYear) : undefined,
+    };
+    delete payload.englishProficiency;
     try {
       if (isEdit) {
         await studentAPI.update(id, payload);
-        toast.success('Student updated successfully.');
+        toast.success('Student updated');
         navigate(`/students/${id}`);
       } else {
         const res = await studentAPI.create(payload);
-        toast.success('Student created successfully.');
+        toast.success('Student created');
         navigate(`/students/${res.data.data.id}`);
       }
     } catch (err) {
-      console.error('Student save failed', {
-        mode: isEdit ? 'update' : 'create',
-        status: err.response?.status,
-        code: err.response?.data?.code,
-        message: err.response?.data?.message || err.message,
-      });
-      const message = getSaveMessage(err);
+      const errorData = err.response?.data;
+      const message = errorData?.code === 'STUDENT_ALREADY_EXISTS'
+        ? 'Student Record Already Exists'
+        : errorData?.message || 'Failed to save student';
       setSaveError(message);
       toast.error(message);
     } finally {
@@ -216,11 +237,10 @@ export default function StudentForm() {
   };
 
   const onInvalid = (formErrors) => {
-    const firstField = Object.keys(formErrors)[0];
-    const message = formErrors[firstField]?.message || 'Please fix the highlighted fields';
+    const message = getFirstFormError(formErrors);
     setSaveError(message);
     toast.error(message);
-    if (firstField) setFocus(firstField);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading) {
@@ -232,7 +252,7 @@ export default function StudentForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} noValidate className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button type="button" variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-9 w-9 flex-shrink-0">
@@ -246,7 +266,7 @@ export default function StudentForm() {
         </div>
         <Button type="submit" disabled={saving} size="sm">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saving ? savingLabel : actionLabel}
+          {saving ? savingLabel : 'Save Student'}
         </Button>
       </div>
 
@@ -267,7 +287,7 @@ export default function StudentForm() {
                 <Field label="Full Name" error={errors.fullName?.message} required>
                   <Input {...register('fullName')} placeholder="e.g. Ahmad Rahman" />
                 </Field>
-                <Field label="Passport Number" error={errors.passportNumber?.message}>
+                <Field label="Passport Number">
                   <Input {...register('passportNumber')} placeholder="e.g. A12345678" />
                 </Field>
                 <Field label="Nationality">
@@ -287,10 +307,10 @@ export default function StudentForm() {
                     <option value="OTHER">Other</option>
                   </select>
                 </Field>
-                <Field label="Email" error={errors.email?.message}>
+                <Field label="Email">
                   <Input type="email" {...register('email')} placeholder="student@email.com" />
                 </Field>
-                <Field label="Phone" error={errors.phone?.message}>
+                <Field label="Phone">
                   <Input {...register('phone')} placeholder="+880 1xxx-xxxxxx" />
                 </Field>
                 <Field label="City">
@@ -413,54 +433,64 @@ export default function StudentForm() {
           {/* English Proficiency */}
           <Card>
             <CardHeader><CardTitle>English Proficiency</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {/* IELTS */}
-              <div className="rounded-lg border border-border p-3 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" {...register('hasIELTS')} className="h-4 w-4 rounded border-input accent-primary" />
-                  <span className="text-sm font-medium">IELTS</span>
-                </label>
-                {hasIELTS && (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <Field label="Band Score">
-                      <Input {...register('ieltsScore')} placeholder="e.g. 6.5" />
-                    </Field>
-                    <Field label="Expiry Date">
-                      <Input type="date" {...register('ieltsExpiry')} />
-                    </Field>
-                  </div>
-                )}
-              </div>
+            <CardContent className="space-y-4">
+              <Field label="Student Has">
+                <select {...register('englishProficiency')} className={selectClass}>
+                  {ENGLISH_PROFICIENCY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
 
-              {/* PTE */}
-              <div className="rounded-lg border border-border p-3 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" {...register('hasPTE')} className="h-4 w-4 rounded border-input accent-primary" />
-                  <span className="text-sm font-medium">PTE Academic</span>
-                </label>
-                {hasPTE && (
-                  <Field label="Score">
-                    <Input {...register('pteScore')} placeholder="e.g. 65" className="mt-2" />
+              {hasIELTS && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Band Score">
+                    <Input {...register('ieltsScore')} placeholder="e.g. 6.5" />
                   </Field>
-                )}
-              </div>
+                  <Field label="Expiry Date">
+                    <Input type="date" {...register('ieltsExpiry')} />
+                  </Field>
+                </div>
+              )}
 
-              {/* MOI */}
-              <div className="rounded-lg border border-border p-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" {...register('hasMOI')} className="h-4 w-4 rounded border-input accent-primary" />
-                  <span className="text-sm font-medium">Medium of Instruction (MOI)</span>
-                </label>
-              </div>
+              {hasPTE && (
+                <Field label="PTE Score">
+                  <Input {...register('pteScore')} placeholder="e.g. 65" />
+                </Field>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Agent &amp; Source</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <Field label="Student Source" error={errors.sourceType?.message} required>
+                <select {...register('sourceType', { onChange: () => setValue('sourceAgentId', '') })} className={selectClass}>
+                  <option value="DIRECT_STUDENT">Direct Student</option><option value="REGISTERED_AGENT">Registered Agent</option><option value="MANAGED_AGENT">Managed Agent</option><option value="REFERRAL_PARTNER">Referral Partner</option>
+                </select>
+              </Field>
+              {sourceType !== 'DIRECT_STUDENT' && <>
+                <Field label="Search Agents"><Input value={agentSearch} onChange={(e) => setAgentSearch(e.target.value)} placeholder="Name, agency, email or phone" /></Field>
+                <Field label="Select Agent" error={errors.sourceAgentId?.message} required>
+                  <select {...register('sourceAgentId')} className={selectClass} disabled={agentsLoading}>
+                    <option value="">{agentsLoading ? 'Loading...' : agents.length ? 'Select matching agent' : 'No active agents found'}</option>
+                    {agents.map((a) => <option key={a.id} value={a.id}>{a.displayName}{a.agencyName ? ` — ${a.agencyName}` : ''}</option>)}
+                  </select>
+                </Field>
+                {sourceAgentId && (() => { const a = agents.find((x) => x.id === sourceAgentId); return a ? <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs"><div className="flex justify-between"><strong>{a.displayName}</strong><button type="button" onClick={() => setValue('sourceAgentId','')}><X className="h-4 w-4" /></button></div><p>{a.type.replaceAll('_',' ')}{a.agencyName ? ` · ${a.agencyName}` : ''}</p><p className="text-muted-foreground">{a.contactPerson || a.email || a.phone || 'No contact supplied'}</p></div> : null; })()}
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowQuickAdd(true)}><Plus className="h-4 w-4" /> Add New Agent</Button>
+              </>}
+              <Field label="Assigned Internal Staff"><select {...register('assignedStaffId')} className={selectClass}><option value="">Unassigned</option>{staff.map((s) => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}</select></Field>
             </CardContent>
           </Card>
 
           <Button type="submit" disabled={saving} className="w-full">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? savingLabel : actionLabel}
+            {saving ? savingLabel : isEdit ? 'Update Student' : 'Create Student'}
           </Button>
         </div>
       </div>
+      {showQuickAdd && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true"><Card className="w-full max-w-lg"><CardHeader><CardTitle>Quick Add {sourceType.replaceAll('_',' ')}</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-3">{[['displayName','Agent Name'],['agencyName','Agency Name'],['contactPerson','Contact Person'],['email','Email'],['phone','Phone'],['whatsapp','WhatsApp'],['address','Address'],['notes','Notes']].map(([key,label]) => <Field key={key} label={label} required={key==='displayName'}><Input value={quickAgent[key]} onChange={(e) => setQuickAgent((q) => ({ ...q, [key]: e.target.value }))} /></Field>)}<div className="col-span-2 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowQuickAdd(false)}>Cancel</Button><Button type="button" onClick={createQuickAgent}>Create &amp; Select</Button></div></CardContent></Card></div>}
     </form>
   );
 }

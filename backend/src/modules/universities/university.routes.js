@@ -8,7 +8,7 @@ const asyncHandler = require('../../utils/asyncHandler');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
 
-router.use(authenticate, tenantContext);
+router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 const ASSIGN_INCLUDE = { assignedTenants: { select: { id: true, name: true } } };
 

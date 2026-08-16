@@ -13,9 +13,24 @@ const storage = multer.diskStorage({
     cb(null, `tenant_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname !== 'logo') return cb(null, true);
+    return ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'].includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Logo must be JPEG, PNG, WEBP or SVG'), false);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
-router.use(authenticate, authorize('SUPER_ADMIN'));
+router.use(authenticate);
+
+router.get('/me', authorize('TENANT_ADMIN'), controller.getMyTenant);
+router.post('/me/logo', authorize('TENANT_ADMIN'), upload.single('logo'), controller.updateMyLogo);
+router.patch('/me/agent-privacy', authorize('TENANT_ADMIN'), controller.updateAgentPrivacy);
+
+router.use(authorize('SUPER_ADMIN'));
 
 router.get('/stats', controller.getTenantStats);
 router.get('/pending/list', controller.listPending);

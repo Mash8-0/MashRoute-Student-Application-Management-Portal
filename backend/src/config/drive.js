@@ -24,7 +24,7 @@ function getDriveClient() {
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error(
       'Google Drive: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN must be set in .env.\n' +
-      'Visit http://localhost:3001/api/v1/drive-auth/url to complete the one-time authorisation.'
+      `Visit ${getRedirectUrl().replace('/callback', '/url')} to complete the one-time authorisation.`
     );
   }
 
@@ -43,10 +43,10 @@ function getOAuth2Client() {
 }
 
 function getRedirectUrl() {
-  const explicitRedirect = (process.env.GOOGLE_REDIRECT_URI || '').trim();
-  if (explicitRedirect) return explicitRedirect;
+  const configured = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+  if (configured) return configured;
 
-  const publicApiUrl = (process.env.PUBLIC_API_URL || '').trim().replace(/\/$/, '');
+  const publicApiUrl = (process.env.PUBLIC_API_URL || process.env.BACKEND_URL || '').trim().replace(/\/$/, '');
   if (publicApiUrl) return `${publicApiUrl}/api/v1/drive-auth/callback`;
 
   const port = process.env.PORT || 3001;

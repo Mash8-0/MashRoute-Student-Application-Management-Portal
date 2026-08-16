@@ -19,7 +19,10 @@ class UserService {
       throw { statusCode: 400, message: 'User limit reached for this plan' };
     }
 
-    const hashedPassword = await bcrypt.hash(password || 'Staff@123!', 12);
+    if (!password || String(password).length < 12) {
+      throw { statusCode: 400, message: 'User password must contain at least 12 characters' };
+    }
+    const hashedPassword = await bcrypt.hash(String(password), 12);
 
     return prisma.user.create({
       data: {

@@ -21,13 +21,8 @@ const initialDarkMode = getInitialDarkMode();
 // Apply immediately on load so there is no flash of the wrong theme.
 applyTheme(initialDarkMode);
 
-const getInitialSidebarOpen = () => {
-  if (typeof window === 'undefined') return true;
-  return window.innerWidth >= 1024;
-};
-
 export const useUIStore = create((set) => ({
-  sidebarOpen: getInitialSidebarOpen(),
+  sidebarOpen: true,
   darkMode: initialDarkMode,
   notifications: [],
   unreadCount: 0,

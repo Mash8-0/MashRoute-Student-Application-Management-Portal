@@ -4,28 +4,38 @@ import { ArrowLeft, Loader2, Save, AlertCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { applicationAPI, studentAPI, universityAPI, userAPI, documentAPI } from '../../api/endpoints';
+import { applicationAPI, studentAPI, universityAPI, userAPI, documentAPI, intakeAPI } from '../../api/endpoints';
 import { toast } from '../../components/ui/toast';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { APPLICATION_STATUSES, formatStatusLabel } from '../../lib/utils';
 import { COURSE_LEVELS, LEVEL_LABELS } from '../../lib/universityData';
+import { CITY_CAMPUSES } from '../../lib/cityUniversity';
 import { useAuthStore } from '../../store/authStore';
 import DocumentUploadSection from '../../components/documents/DocumentUploadSection';
 import CommissionCard from '../../components/commission/CommissionCard';
 
 const REQUIRED_DOC_TYPES = ['PHOTO', 'PASSPORT', 'PASSPORT_FULL_SCAN', 'ACADEMIC_DOCUMENTS'];
+const ENGLISH_PROFICIENCY_OPTIONS = [
+  { value: 'NONE', label: 'None / Not Available' },
+  { value: 'IELTS', label: 'IELTS' },
+  { value: 'PTE', label: 'PTE' },
+  { value: 'MOI', label: 'MOI' },
+];
 
 const schema = z.object({
   studentId: z.string().min(1, 'Student is required'),
   universityId: z.string().optional(),
+  campusId: z.string().optional(),
+  programmeId: z.string().optional(),
+  intakeId: z.string().optional(),
   program: z.string().optional(),
   intake: z.string().optional(),
   intakeYear: z.string().optional(),
   country: z.string().optional(),
-  priority: z.string().optional(),
   agentId: z.string().optional(),
+  englishProficiency: z.enum(['IELTS', 'PTE', 'MOI', 'NONE']).optional(),
   status: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -58,6 +68,7 @@ export default function ApplicationForm() {
   const [studentDocs, setStudentDocs] = useState([]);
   const [commissions, setCommissions] = useState([]);
   const [policy, setPolicy] = useState(null);
+  const [configuredIntakes, setConfiguredIntakes] = useState([]);
 
   const canUpdateStatus = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
 
@@ -73,25 +84,74 @@ export default function ApplicationForm() {
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
-      priority: 'MEDIUM',
       status: 'DRAFT',
+      englishProficiency: 'NONE',
       studentId: searchParams.get('studentId') || '',
     },
   });
 
   const selectedUnivId = watch('universityId');
+  const selectedCampusId = watch('campusId');
+  const selectedProgrammeId = watch('programmeId');
+  const selectedIntakeId = watch('intakeId');
   const selectedStudentId = watch('studentId');
   const selectedAgentId = watch('agentId');
   const selectedProgram = watch('program');
+  const selectedEnglishProficiency = watch('englishProficiency') || 'NONE';
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
   const selectedUniv = universities.find((u) => u.id === selectedUnivId);
   const univCourses = Array.isArray(selectedUniv?.courses) ? selectedUniv.courses : [];
   const hasCourses = univCourses.length > 0;
   const hasIntakes = Array.isArray(selectedUniv?.intakes) && selectedUniv.intakes.length > 0;
+  const hasConfiguredIntakes = configuredIntakes.length > 0;
+
+  const configuredLevels = [...new Set(configuredIntakes.map((row) => row.studyLevel).filter(Boolean))];
+  const campusOptions = [...new Map(configuredIntakes
+    .filter((row) => !level || row.studyLevel === level)
+    .map((row) => [row.campusId, {
+    id: row.campusId,
+    code: row.campusCode,
+    name: row.campusName || row.campusCode || row.campusId,
+  }])).values()];
+  const selectedConfiguredCampus = campusOptions.find((campus) => campus.id === selectedCampusId);
+  const selectedConfiguredCampusCode = String(selectedConfiguredCampus?.code || '').trim().toUpperCase();
+  const campusIntakes = selectedCampusId
+    ? configuredIntakes.filter((row) => {
+        const rowCode = String(row.campusCode || '').trim().toUpperCase();
+        return selectedConfiguredCampusCode && rowCode
+          ? rowCode === selectedConfiguredCampusCode
+          : row.campusId === selectedCampusId;
+      })
+    : [];
+  const configuredProgrammes = [...new Map(
+    campusIntakes
+      .filter((row) => !level || row.studyLevel === level)
+      .map((row) => [row.programmeName, { id: row.programmeId, name: row.programmeName }])
+  ).values()];
+  const programmeIntakes = campusIntakes.filter((row) => row.programmeId === selectedProgrammeId);
 
   // Levels this university actually offers; courses under the chosen level.
+  const legacyCampusOptions = [...new Map(univCourses.filter((course) => !level || course.level === level).flatMap((course) => {
+    const codes = Array.isArray(course.campusCodes) && course.campusCodes.length
+      ? course.campusCodes
+      : (Array.isArray(course.campuses) && course.campuses.length ? course.campuses : ['MAIN']);
+    return codes.map((code, index) => [code, {
+      id: `${selectedUnivId}:${code}`,
+      code,
+      name: course.campuses?.[index] || CITY_CAMPUSES[code] || (code === 'MAIN' ? selectedUniv?.city || 'Main Campus' : code),
+    }]);
+  })).values()];
+  const courseMatchesLegacyCampus = (course) => {
+    const selectedCode = String(selectedCampusId || '').split(':').at(-1).trim().toUpperCase();
+    const campuses = Array.isArray(course.campusCodes) && course.campusCodes.length
+      ? course.campusCodes
+      : (Array.isArray(course.campuses) && course.campuses.length ? course.campuses : ['MAIN']);
+    return Boolean(selectedCode) && campuses.some((code) => String(code).trim().toUpperCase() === selectedCode);
+  };
   const availableLevels = COURSE_LEVELS.filter((lvl) => univCourses.some((c) => c.level === lvl));
-  const levelCourses = level ? univCourses.filter((c) => c.level === level) : [];
+  const levelCourses = level && selectedCampusId
+    ? univCourses.filter((c) => c.level === level && courseMatchesLegacyCampus(c))
+    : [];
 
   // Intake options: admin-set list, else a generated "Month Year" list.
   const intakeOptions = hasIntakes
@@ -108,6 +168,29 @@ export default function ApplicationForm() {
     if (found) setLevel(found.level);
   }, [hasCourses, selectedUnivId]);
 
+  useEffect(() => {
+    if (!selectedUnivId) {
+      setConfiguredIntakes([]);
+      return;
+    }
+    intakeAPI.available({ universityId: selectedUnivId })
+      .then((res) => setConfiguredIntakes(res.data.data || []))
+      .catch(() => setConfiguredIntakes([]));
+  }, [selectedUnivId]);
+
+  // Keep the dependent selects in sync when editing an application. Older
+  // applications may have stale campus/programme IDs, while intakeId still
+  // points at the authoritative configured intake.
+  useEffect(() => {
+    const selectedIntake = configuredIntakes.find((row) => row.id === selectedIntakeId);
+    if (!selectedIntake) return;
+
+    if (level !== selectedIntake.studyLevel) setLevel(selectedIntake.studyLevel || '');
+    if (selectedCampusId !== selectedIntake.campusId) setValue('campusId', selectedIntake.campusId);
+    if (selectedProgrammeId !== selectedIntake.programmeId) setValue('programmeId', selectedIntake.programmeId);
+    if (selectedProgram !== selectedIntake.programmeName) setValue('program', selectedIntake.programmeName);
+  }, [configuredIntakes, selectedIntakeId, level, selectedCampusId, selectedProgrammeId, selectedProgram, setValue]);
+
   // Whose commission applies: the assigned agent's tier, else the current user's (if staff).
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const activeCategory = selectedAgent?.agentCategory || (user?.role === 'STAFF' ? user?.agentCategory : null);
@@ -122,7 +205,7 @@ export default function ApplicationForm() {
   };
   const activeCommission = resolveRate(activeCategory);
 
-  // Fetch the selected student's documents (new applications only)
+  // Fetch the selected student's documents
   const refetchStudentDocs = () => {
     if (!selectedStudentId) return;
     documentAPI.list(selectedStudentId).then((res) => {
@@ -131,14 +214,14 @@ export default function ApplicationForm() {
   };
 
   useEffect(() => {
-    if (isEdit || !selectedStudentId) {
+    if (!selectedStudentId) {
       setStudentDocs([]);
       return;
     }
     documentAPI.list(selectedStudentId).then((res) => {
       setStudentDocs(res.data.data || []);
     }).catch(() => setStudentDocs([]));
-  }, [selectedStudentId, isEdit]);
+  }, [selectedStudentId]);
 
   const uploadedTypes = new Set(studentDocs.map((d) => d.type));
   const uploadedRequiredCount = REQUIRED_DOC_TYPES.filter((t) => uploadedTypes.has(t)).length;
@@ -176,23 +259,52 @@ export default function ApplicationForm() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (isEdit || !selectedStudent) return;
+    const inferred = selectedStudent.hasIELTS
+      ? 'IELTS'
+      : selectedStudent.hasPTE
+        ? 'PTE'
+        : selectedStudent.hasMOI
+          ? 'MOI'
+          : 'NONE';
+    setValue('englishProficiency', inferred);
+  }, [
+    selectedStudent?.id,
+    selectedStudent?.hasIELTS,
+    selectedStudent?.hasPTE,
+    selectedStudent?.hasMOI,
+    isEdit,
+    setValue,
+  ]);
+
   // Load existing application for edit
   useEffect(() => {
     if (!isEdit) return;
     applicationAPI.get(id).then((res) => {
       const a = res.data.data;
+      if (a.student && !students.some((s) => s.id === a.student.id)) {
+        setStudents((prev) => [a.student, ...prev.filter((s) => s.id !== a.student.id)]);
+      }
+      const inferredEnglish = a.englishProficiency || (
+        a.student?.hasIELTS ? 'IELTS' : a.student?.hasPTE ? 'PTE' : a.student?.hasMOI ? 'MOI' : 'NONE'
+      );
       reset({
         studentId: a.studentId || '',
         universityId: a.universityId || '',
+        campusId: a.campusId || a.intakeRecord?.campusId || '',
+        programmeId: a.programmeId || a.intakeRecord?.programmeId || '',
+        intakeId: a.intakeId || '',
         program: a.program || '',
         intake: a.intake || '',
         intakeYear: a.intakeYear?.toString() || '',
         country: a.country || '',
-        priority: a.priority || 'MEDIUM',
         agentId: a.agentId || '',
+        englishProficiency: inferredEnglish,
         status: a.status || 'DRAFT',
         notes: a.notes || '',
       });
+      if (a.intakeRecord?.studyLevel) setLevel(a.intakeRecord.studyLevel);
       setLoading(false);
     }).catch(() => {
       toast.error('Application not found');
@@ -230,6 +342,7 @@ export default function ApplicationForm() {
       intakeYear: data.intakeYear ? parseInt(data.intakeYear) : (yearFromIntake ? parseInt(yearFromIntake[1]) : undefined),
       universityId: data.universityId || undefined,
       agentId: data.agentId || undefined,
+      englishProficiency: data.englishProficiency || 'NONE',
     };
     try {
       if (isEdit) {
@@ -307,15 +420,22 @@ export default function ApplicationForm() {
                   ))}
                 </select>
               </Field>
+              <Field label="English Proficiency" error={errors.englishProficiency?.message}>
+                <select {...register('englishProficiency')} className={selectClass}>
+                  {ENGLISH_PROFICIENCY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
             </CardContent>
           </Card>
 
-          {/* Required Documents (new application + student selected) */}
-          {docGateActive && selectedStudent && (
+          {/* Required Documents */}
+          {selectedStudent && (docGateActive || isEdit) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between gap-3">
-                  <span>Required Documents</span>
+                  <span>{isEdit ? 'Documents' : 'Required Documents'}</span>
                   <span className={`text-sm font-semibold ${requiredDone ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {uploadedRequiredCount}/{REQUIRED_DOC_TYPES.length} Uploaded
                   </span>
@@ -341,6 +461,7 @@ export default function ApplicationForm() {
                   canUpload={true}
                   canDelete={false}
                   onRefresh={refetchStudentDocs}
+                  englishProficiency={selectedEnglishProficiency}
                 />
               </CardContent>
             </Card>
@@ -355,7 +476,14 @@ export default function ApplicationForm() {
                 <Field label="University" error={errors.universityId?.message}>
                   <select
                     {...register('universityId', {
-                      onChange: () => { setLevel(''); setValue('program', ''); setValue('intake', ''); },
+                      onChange: () => {
+                        setLevel('');
+                        setValue('campusId', '');
+                        setValue('programmeId', '');
+                        setValue('intakeId', '');
+                        setValue('program', '');
+                        setValue('intake', '');
+                      },
                     })}
                     className={selectClass}
                   >
@@ -370,14 +498,91 @@ export default function ApplicationForm() {
                   <Input {...register('country')} placeholder="e.g. Malaysia" />
                 </Field>
 
-                {/* Row 2 — Level / Course */}
-                {hasCourses ? (
+                {hasConfiguredIntakes ? (
+                  <>
+                    <Field label="Level" required>
+                      <select
+                        className={selectClass}
+                        value={level}
+                        onChange={(e) => {
+                          setLevel(e.target.value);
+                          setValue('campusId', '');
+                          setValue('programmeId', '');
+                          setValue('intakeId', '');
+                          setValue('program', '');
+                        }}
+                      >
+                        <option value="">— Select level —</option>
+                        {configuredLevels.map((value) => (
+                          <option key={value} value={value}>{LEVEL_LABELS[value] || value}</option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Campus" required>
+                      <select
+                        {...register('campusId', {
+                          onChange: () => {
+                            setValue('programmeId', '');
+                            setValue('intakeId', '');
+                            setValue('program', '');
+                          },
+                        })}
+                        className={selectClass}
+                        disabled={!level}
+                      >
+                        <option value="">{level ? '— Select campus —' : 'Select a level first'}</option>
+                        {campusOptions.map((campus) => (
+                          <option key={campus.id} value={campus.id}>{campus.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Course" required>
+                      <select
+                        value={selectedProgram || ''}
+                        onChange={(event) => {
+                          const programmeName = event.target.value;
+                          const selected = configuredProgrammes.find((row) => row.name === programmeName);
+                          setValue('programmeId', selected?.id || '', { shouldDirty: true });
+                          setValue('program', programmeName, { shouldDirty: true });
+                          setValue('intakeId', '', { shouldDirty: true });
+                        }}
+                        className={selectClass}
+                        disabled={!selectedCampusId}
+                      >
+                        <option value="">{selectedCampusId ? '— Select course —' : 'Select a campus first'}</option>
+                        {configuredProgrammes.map((programme) => (
+                          <option key={programme.id} value={programme.name}>{programme.name}</option>
+                        ))}
+                      </select>
+                      <input type="hidden" {...register('programmeId')} />
+                    </Field>
+
+                    <Field label="Intake" required>
+                      <select {...register('intakeId')} className={selectClass} disabled={!selectedProgrammeId}>
+                        <option value="">{selectedProgrammeId ? '— Select intake —' : 'Select a course first'}</option>
+                        {programmeIntakes.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {new Date(2000, row.intakeMonth - 1).toLocaleString('en', { month: 'long' })} {row.intakeYear} · {String(row.intakeType).replaceAll('_', ' ')}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </>
+                ) : hasCourses ? (
                   <>
                     <Field label="Level">
                       <select
                         className={selectClass}
                         value={level}
-                        onChange={(e) => { setLevel(e.target.value); setValue('program', ''); }}
+                        onChange={(e) => {
+                          setLevel(e.target.value);
+                          setValue('campusId', '');
+                          setValue('programmeId', '');
+                          setValue('program', '');
+                          setValue('intake', '');
+                        }}
                       >
                         <option value="">— Select level —</option>
                         {availableLevels.map((lvl) => (
@@ -386,9 +591,34 @@ export default function ApplicationForm() {
                       </select>
                     </Field>
 
+                    <Field label="Campus" required>
+                      <select
+                        {...register('campusId', {
+                          onChange: () => {
+                            setValue('programmeId', '');
+                            setValue('program', '');
+                            setValue('intake', '');
+                          },
+                        })}
+                        className={selectClass}
+                        disabled={!level}
+                      >
+                        <option value="">{level ? '— Select campus —' : 'Select a level first'}</option>
+                        {legacyCampusOptions.map((campus) => (
+                          <option key={campus.id} value={campus.id}>{campus.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+
                     <Field label="Course" error={errors.program?.message}>
-                      <select {...register('program')} className={selectClass} disabled={!level}>
-                        <option value="">{level ? '— Select course —' : 'Select a level first'}</option>
+                      <select
+                        {...register('program', {
+                          onChange: (event) => setValue('programmeId', event.target.value ? `${selectedUnivId}:${event.target.value}` : ''),
+                        })}
+                        className={selectClass}
+                        disabled={!selectedCampusId}
+                      >
+                        <option value="">{selectedCampusId ? '— Select course —' : 'Select a campus first'}</option>
                         {levelCourses.map((c) => (
                           <option key={c.name} value={c.name}>{c.name}</option>
                         ))}
@@ -401,24 +631,17 @@ export default function ApplicationForm() {
                   </Field>
                 )}
 
-                {/* Row 3 — Intake (Month Year) / Priority */}
-                <Field label="Intake" error={errors.intake?.message}>
-                  <select {...register('intake')} className={selectClass}>
-                    <option value="">— Select intake —</option>
-                    {intakeOptions.map((i) => (
-                      <option key={i} value={i}>{i}</option>
-                    ))}
-                  </select>
-                </Field>
+                {!hasConfiguredIntakes && (
+                  <Field label="Intake" error={errors.intake?.message}>
+                    <select {...register('intake')} className={selectClass}>
+                      <option value="">— Select intake —</option>
+                      {intakeOptions.map((i) => (
+                        <option key={i} value={i}>{i}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
 
-                <Field label="Priority" error={errors.priority?.message}>
-                  <select {...register('priority')} className={selectClass}>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent</option>
-                  </select>
-                </Field>
               </div>
             </CardContent>
           </Card>

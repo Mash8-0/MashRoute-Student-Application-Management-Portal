@@ -52,6 +52,7 @@ cd /var/www/mashroute/backend
 cp .env.production.example .env
 nano .env        # fill in DATABASE_URL (Neon), JWT secrets, ALLOWED_ORIGINS=https://yourdomain.com,
                  # PUBLIC_API_URL=https://yourdomain.com, Google Drive vars (optional)
+                 # GOOGLE_REDIRECT_URI=https://yourdomain.com/api/v1/drive-auth/callback
 
 npm ci --omit=dev
 npx prisma generate
@@ -146,6 +147,6 @@ npm run build
 
 - **Secrets:** never commit the real `.env`. The `.env.production.example` files are templates only.
 - **Database:** Neon is already cloud-hosted — just reuse your `DATABASE_URL`. `npx prisma db push` syncs the schema; it does **not** wipe data.
-- **Google Drive:** your current refresh token is expired (`invalid_grant`), so uploads fall back to **local storage** under `/uploads`. On a VPS that's persistent and works. To restore Drive, re-authorize and set the `GOOGLE_*` vars. Set `PUBLIC_API_URL` so local file links are absolute.
+- **Google Drive:** your current refresh token is expired (`invalid_grant`), so uploads fall back to **local storage** under `/uploads`. On a VPS that's persistent and works. To restore Drive, add the live callback URL (`https://yourdomain.com/api/v1/drive-auth/callback`) in Google Cloud Console, set `GOOGLE_REDIRECT_URI` to that same URL, visit `/api/v1/drive-auth/url`, then save the returned `GOOGLE_REFRESH_TOKEN`. Set `PUBLIC_API_URL` so local file links are absolute.
 - **CORS:** `ALLOWED_ORIGINS` must list your exact frontend origin(s), comma-separated, with `https://`.
 - **Updating later:** `git pull` → backend `npm ci && npx prisma db push && pm2 restart mashroute-api` → frontend `npm run build`.

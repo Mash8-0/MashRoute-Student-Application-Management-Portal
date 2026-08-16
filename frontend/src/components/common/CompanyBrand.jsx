@@ -7,9 +7,16 @@ const sizeMap = {
   lg: 'h-12 w-12 text-base',
 };
 
+const imageSizeMap = {
+  sm: 'h-9 w-16',
+  md: 'h-10 w-20',
+  lg: 'h-12 w-24',
+};
+
 export default function CompanyBrand({ name, logo, size = 'md', showName = true, className = '' }) {
   const [imgError, setImgError] = useState(false);
   const sizeClasses = sizeMap[size] || sizeMap.md;
+  const imageSizeClasses = imageSizeMap[size] || imageSizeMap.md;
   const initials = getInitials(name);
 
   const showImage = logo && !imgError;
@@ -21,7 +28,10 @@ export default function CompanyBrand({ name, logo, size = 'md', showName = true,
           src={logo}
           alt={name || 'Company logo'}
           onError={() => setImgError(true)}
-          className={cn(sizeClasses, 'flex-shrink-0 rounded-lg object-cover')}
+          className={cn(
+            imageSizeClasses,
+            'flex-shrink-0 rounded-md border border-border/60 bg-white object-contain p-1 shadow-sm'
+          )}
         />
       ) : (
         <div

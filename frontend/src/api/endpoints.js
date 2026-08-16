@@ -19,6 +19,11 @@ export const registrationAPI = {
 
 // ─── Tenants ─────────────────────────────────────────────────────────────────
 export const tenantAPI = {
+  me: () => api.get('/tenants/me'),
+  uploadMyLogo: (formData) => api.post('/tenants/me/logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  updateAgentPrivacy: (agentCanViewStudentFullName) => api.patch('/tenants/me/agent-privacy', { agentCanViewStudentFullName }),
   list: (params) => api.get('/tenants', { params }),
   create: (data) =>
     api.post(
@@ -51,16 +56,37 @@ export const userAPI = {
 // ─── Students ─────────────────────────────────────────────────────────────────
 export const studentAPI = {
   list: (params) => api.get('/students', { params }),
+  listDeleted: (params) => api.get('/students/deleted', { params }),
   create: (data) => api.post('/students', data),
   get: (id) => api.get(`/students/${id}`),
   update: (id, data) => api.patch(`/students/${id}`, data),
+  transfer: (id, ownerId) => api.patch(`/students/${id}/transfer`, { ownerId }),
   delete: (id) => api.delete(`/students/${id}`),
+  restore: (id) => api.patch(`/students/${id}/restore`),
+  permanentlyDelete: (id) => api.delete(`/students/${id}/permanent`),
+};
+
+export const agentAPI = {
+  list: (params) => api.get('/agents', { params }),
+  get: (id) => api.get(`/agents/${id}`),
+  create: (data) => api.post('/agents', data),
+  update: (id, data) => api.patch(`/agents/${id}`, data),
+  setStatus: (id, status) => api.patch(`/agents/${id}/status`, { status }),
+};
+
+export const agentCommissionAPI = {
+  mine: (params) => api.get('/agent-commissions/mine', { params }),
+  myDetail: (id) => api.get(`/agent-commissions/mine/${id}`),
+  uploadInvoice: (id, data) => api.post(`/agent-commissions/mine/${id}/invoice`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  list: () => api.get('/agent-commissions'),
+  create: (data) => api.post('/agent-commissions', data),
+  setStatus: (id, data) => api.patch(`/agent-commissions/${id}/status`, data),
 };
 
 // ─── Applications ─────────────────────────────────────────────────────────────
 export const applicationAPI = {
   list: (params) => api.get('/applications', { params }),
-  listMdac: (params) => api.get('/applications/mdac/records', { params }),
+  listDeleted: (params) => api.get('/applications/deleted', { params }),
   create: (data) => api.post('/applications', data),
   get: (id) => api.get(`/applications/${id}`),
   update: (id, data) => api.patch(`/applications/${id}`, data),
@@ -92,13 +118,6 @@ export const applicationAPI = {
   updateArrival: (id, formData) => api.patch(`/applications/${id}/arrival`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
-  getMdac: (id) => api.get(`/applications/${id}/mdac`),
-  markMdacNotRequired: (id, notes) => api.patch(`/applications/${id}/mdac/not-required`, { notes }),
-  markMdacSubmitted: (id, notes) => api.post(`/applications/${id}/mdac/submitted`, { notes }),
-  uploadMdacProof: (id, formData) => api.post(`/applications/${id}/mdac/proof`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
-  verifyMdac: (id, data) => api.post(`/applications/${id}/mdac/verify`, data),
   uploadTuitionProof: (id, formData) => api.post(`/applications/${id}/tuition-proof`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
@@ -108,9 +127,27 @@ export const applicationAPI = {
   // Commission payout status: 'PENDING' | 'ELIGIBLE' | 'PAID'
   setCommissionStatus: (id, status) => api.patch(`/applications/${id}/commission-status`, { status }),
   delete: (id) => api.delete(`/applications/${id}`),
+  restore: (id) => api.patch(`/applications/${id}/restore`),
+  permanentlyDelete: (id) => api.delete(`/applications/${id}/permanent`),
   getNotes: (id) => api.get(`/applications/${id}/notes`),
   addNote: (id, content, isPrivate) => api.post(`/applications/${id}/notes`, { content, isPrivate }),
   getHistory: (id) => api.get(`/applications/${id}/history`),
+};
+
+export const emgsPaymentAPI = {
+  listAccounts: (params) => api.get('/emgs-payments/accounts', { params }),
+  createAccount: (data) => api.post('/emgs-payments/accounts', data),
+  updateAccount: (id, data) => api.patch(`/emgs-payments/accounts/${id}`, data),
+  archiveAccount: (id) => api.delete(`/emgs-payments/accounts/${id}`),
+  getApplicationPayment: (applicationId) => api.get(`/emgs-payments/applications/${applicationId}`),
+  setup: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/setup`, data),
+  postpone: (applicationId) => api.post(`/emgs-payments/applications/${applicationId}/postpone`),
+  notRequired: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/not-required`, data),
+  submitProof: (applicationId, data) => api.post(`/emgs-payments/applications/${applicationId}/proofs`, data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  startReview: (transactionId) => api.post(`/emgs-payments/transactions/${transactionId}/review`),
+  verify: (transactionId, data) => api.post(`/emgs-payments/transactions/${transactionId}/verify`, data),
+  reject: (transactionId, data) => api.post(`/emgs-payments/transactions/${transactionId}/reject`, data),
+  reverse: (transactionId, data) => api.post(`/emgs-payments/transactions/${transactionId}/reverse`, data),
 };
 
 // ─── LOE ──────────────────────────────────────────────────────────────────────
@@ -163,6 +200,22 @@ export const universityAPI = {
   getCommissions: (id) => api.get(`/universities/${id}/commissions`),
   setCommissions: (id, rows, policy) => api.put(`/universities/${id}/commissions`, { rows, policy }),
   delete: (id) => api.delete(`/universities/${id}`),
+};
+
+export const intakeAPI = {
+  available: (params) => api.get('/intakes/available', { params }),
+  list: (params) => api.get('/intakes', { params }),
+  create: (data) => api.post('/intakes', data),
+  update: (id, data) => api.patch(`/intakes/${id}`, data),
+  setActive: (id, isActive) => api.patch(`/intakes/${id}/active`, { isActive }),
+  bulkActive: (ids, isActive) => api.patch('/intakes/bulk-active', { ids, isActive }),
+  duplicate: (id, targetYear) => api.post(`/intakes/${id}/duplicate`, { targetYear }),
+  audit: (id) => api.get(`/intakes/${id}/audit`),
+  requestApproval: (data) => api.post('/intakes/late-approvals', data),
+  listApprovals: (params) => api.get('/intakes/late-approvals', { params }),
+  reviewApproval: (id, decision, reviewNotes) => api.patch(`/intakes/late-approvals/${id}`, { decision, reviewNotes }),
+  getSetting: () => api.get('/intakes/settings'),
+  updateSetting: (minimumInternationalLeadTimeDays) => api.patch('/intakes/settings', { minimumInternationalLeadTimeDays }),
 };
 
 // ─── WhatsApp notifications ─────────────────────────────────────────────────────

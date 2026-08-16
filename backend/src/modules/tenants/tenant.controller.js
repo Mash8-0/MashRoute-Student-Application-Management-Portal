@@ -17,6 +17,17 @@ const getTenant = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, tenant);
 });
 
+const getMyTenant = asyncHandler(async (req, res) => {
+  const tenant = await tenantService.getMyTenant(req.user.tenantId);
+  return ApiResponse.success(res, tenant);
+});
+
+const updateMyLogo = asyncHandler(async (req, res) => {
+  const tenant = await tenantService.updateMyLogo(req.user.tenantId, req.file);
+  return ApiResponse.success(res, tenant, 'Company logo updated');
+});
+const updateAgentPrivacy = asyncHandler(async (req, res) => ApiResponse.success(res, await tenantService.updateAgentPrivacy(req.user.tenantId, req.body.agentCanViewStudentFullName), 'Agent privacy updated'));
+
 const updateTenant = asyncHandler(async (req, res) => {
   const tenant = await tenantService.updateTenant(req.params.id, req.body);
   return ApiResponse.success(res, tenant, 'Tenant updated');
@@ -62,4 +73,4 @@ const rejectTenant = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, tenant, 'Tenant rejected');
 });
 
-module.exports = { createTenant, listTenants, getTenant, updateTenant, suspendTenant, activateTenant, deleteTenant, getTenantStats, listPending, getPendingCount, approveTenant, rejectTenant };
+module.exports = { createTenant, listTenants, getTenant, getMyTenant, updateMyLogo, updateAgentPrivacy, updateTenant, suspendTenant, activateTenant, deleteTenant, getTenantStats, listPending, getPendingCount, approveTenant, rejectTenant };

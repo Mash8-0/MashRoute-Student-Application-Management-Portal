@@ -84,7 +84,10 @@ class TenantService {
     const exists = await prisma.tenant.findFirst({ where: { slug } });
     const finalSlug = exists ? `${slug}-${Date.now()}` : slug;
 
-    const hashedPassword = await bcrypt.hash(adminPassword || 'Admin@123!', 12);
+    if (!adminPassword || String(adminPassword).length < 12) {
+      throw { statusCode: 400, message: 'Initial Admin password must contain at least 12 characters' };
+    }
+    const hashedPassword = await bcrypt.hash(String(adminPassword), 12);
 
     const tenant = await prisma.$transaction(async (tx) => {
       const newTenant = await tx.tenant.create({
@@ -167,7 +170,13 @@ class TenantService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          _count: { select: { users: true, students: true, applications: true } },
+          _count: {
+            select: {
+              users: { where: { deletedAt: null } },
+              students: { where: { deletedAt: null } },
+              applications: { where: { deletedAt: null } },
+            },
+          },
         },
       }),
       prisma.tenant.count({ where }),
@@ -180,12 +189,86 @@ class TenantService {
     const tenant = await prisma.tenant.findUnique({
       where: { id, deletedAt: null },
       include: {
-        _count: { select: { users: true, students: true, applications: true } },
+        _count: {
+          select: {
+            users: { where: { deletedAt: null } },
+            students: { where: { deletedAt: null } },
+            applications: { where: { deletedAt: null } },
+          },
+        },
         subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     });
     if (!tenant) throw { statusCode: 404, message: 'Tenant not found' };
     return tenant;
+  }
+
+  async getMyTenant(tenantId) {
+    if (!tenantId) throw { statusCode: 400, message: 'Tenant account not found' };
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        email: true,
+        phone: true,
+        country: true,
+        address: true,
+        website: true,
+        logo: true,
+        status: true,
+        plan: true,
+        settings: true,
+      },
+    });
+    if (!tenant) throw { statusCode: 404, message: 'Tenant not found' };
+    return tenant;
+  }
+
+  async updateMyLogo(tenantId, file) {
+    if (!tenantId) throw { statusCode: 400, message: 'Tenant account not found' };
+    if (!file) throw { statusCode: 400, message: 'Logo file is required' };
+
+    let upload;
+    try {
+      upload = await uploadToDrive(file, 'company-logos');
+    } catch (err) {
+      console.error('[tenant logo] file upload failed:', err?.message, err?.errors || err?.response?.data || '');
+      throw { statusCode: 502, message: 'Logo upload failed. Please try again.' };
+    }
+
+    const current = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { settings: true },
+    });
+    const settings = current?.settings && typeof current.settings === 'object' ? current.settings : {};
+
+    return prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        logo: upload.fileUrl,
+        settings: {
+          ...settings,
+          ...(upload.driveFileId && { logoDriveFileId: upload.driveFileId }),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        plan: true,
+        logo: true,
+      },
+    });
+  }
+
+  async updateAgentPrivacy(tenantId, agentCanViewStudentFullName) {
+    if (!tenantId) throw { statusCode: 400, message: 'Tenant account not found' };
+    const current = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { settings: true } });
+    const settings = current?.settings && typeof current.settings === 'object' ? current.settings : {};
+    return prisma.tenant.update({ where: { id: tenantId }, data: { settings: { ...settings, agentCanViewStudentFullName: Boolean(agentCanViewStudentFullName) } }, select: { id: true, settings: true } });
   }
 
   async updateTenant(id, data) {
@@ -224,9 +307,31 @@ class TenantService {
   }
 
   async deleteTenant(id) {
-    return prisma.tenant.update({
-      where: { id },
-      data: { deletedAt: new Date(), status: 'CANCELLED' },
+    const deletedAt = new Date();
+    return prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.findFirst({ where: { id, deletedAt: null } });
+      if (!tenant) throw { statusCode: 404, message: 'Tenant not found' };
+
+      // Keep all business history recoverable, but ensure a cancelled tenant
+      // cannot leave active users, students, or applications in dashboards and
+      // platform analytics.
+      await tx.application.updateMany({
+        where: { tenantId: id, deletedAt: null },
+        data: { deletedAt },
+      });
+      await tx.student.updateMany({
+        where: { tenantId: id, deletedAt: null },
+        data: { deletedAt, isActive: false, passportNumberNormalized: null },
+      });
+      await tx.user.updateMany({
+        where: { tenantId: id, deletedAt: null },
+        data: { deletedAt, isActive: false, refreshToken: null },
+      });
+
+      return tx.tenant.update({
+        where: { id },
+        data: { deletedAt, status: 'CANCELLED' },
+      });
     });
   }
 

@@ -19,12 +19,28 @@ for (const dir of ['logs', 'uploads/temp', 'uploads/documents', 'uploads/loe']) 
 const logger = require('./config/logger');
 const errorMiddleware = require('./middleware/error.middleware');
 const routes = require('./routes');
-const { startMdacScheduler } = require('./modules/mdac/mdac.scheduler');
 
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 3001;
 const API_VERSION = process.env.API_VERSION || 'v1';
+
+function getAllowedOrigins() {
+  return (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function isAllowedDevOrigin(origin) {
+  if (process.env.NODE_ENV === 'production' || !origin) return false;
+  try {
+    const url = new URL(origin);
+    return ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
 // Behind Nginx / a reverse proxy in production, trust the first proxy hop so
 // rate limiting, secure cookies, and req.ip use the real client address.
@@ -35,7 +51,11 @@ if (process.env.NODE_ENV === 'production') {
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 const io = new Server(httpServer, {
   cors: {
-    origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(','),
+    origin: (origin, callback) => {
+      const allowed = getAllowedOrigins();
+      if (!origin || allowed.includes(origin) || isAllowedDevOrigin(origin)) callback(null, true);
+      else callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   },
 });
@@ -71,8 +91,8 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 app.use(cors({
   origin: (origin, callback) => {
-    const allowed = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(',');
-    if (!origin || allowed.includes(origin)) callback(null, true);
+    const allowed = getAllowedOrigins();
+    if (!origin || allowed.includes(origin) || isAllowedDevOrigin(origin)) callback(null, true);
     else callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -81,15 +101,16 @@ app.use(cors({
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 200,
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path.startsWith(`/api/${API_VERSION}/auth/`),
   message: { success: false, message: 'Too many requests, please try again later' },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 20,
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 100,
   message: { success: false, message: 'Too many auth attempts, please try again later' },
 });
 
@@ -125,6 +146,10 @@ app.get('/health', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
+// Meta calls this public, unversioned endpoint directly. Keep it outside the
+// authenticated API router; verification is secured by WHATSAPP_VERIFY_TOKEN.
+app.use('/api/webhooks/whatsapp', require('./routes/whatsapp-webhook.routes'));
+app.use('/api/admin', require('./modules/admin/admin.routes'));
 app.use(`/api/${API_VERSION}`, routes);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
@@ -141,7 +166,6 @@ httpServer.listen(PORT, () => {
   logger.info(`📡 API: http://localhost:${PORT}/api/${API_VERSION}`);
   logger.info(`🔌 Socket.io: enabled`);
   logger.info(`🗄️  Database: Neon PostgreSQL`);
-  startMdacScheduler();
 });
 
 process.on('SIGTERM', () => {

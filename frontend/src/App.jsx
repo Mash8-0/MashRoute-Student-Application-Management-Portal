@@ -34,6 +34,10 @@ import Universities from './pages/shared/Universities';
 import UniversityDetail from './pages/shared/UniversityDetail';
 import Analytics from './pages/shared/Analytics';
 import Settings from './pages/shared/Settings';
+import Agents from './pages/shared/Agents';
+import AgentCommissionDashboard from './pages/agent/AgentCommissionDashboard';
+import Restore from './pages/shared/Restore';
+import IntakeManagement from './pages/shared/IntakeManagement';
 
 // Super admin pages
 import Tenants from './pages/super-admin/Tenants';
@@ -68,6 +72,7 @@ function RoleRedirect() {
   const gated = statusRedirect(user);
   if (gated) return <Navigate to={gated} replace />;
   if (user.role === 'SUPER_ADMIN') return <Navigate to="/super-admin" replace />;
+  if (user.role === 'REGISTERED_AGENT') return <Navigate to="/agent/commissions" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
@@ -143,14 +148,22 @@ export default function App() {
           {/* Other modules */}
           <Route path="/payments" element={<Payments />} />
           <Route path="/commission" element={<Commission />} />
+          <Route path="/agents" element={<Agents />} />
           <Route path="/users" element={<Users />} />
           <Route path="/universities" element={<Universities />} />
           <Route path="/universities/:id" element={<UniversityDetail />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/restore" element={<Restore />} />
+          <Route path="/intakes" element={<IntakeManagement />} />
 
           {/* Documents — served from StudentDetail tabs */}
           <Route path="/documents" element={<Navigate to="/students" replace />} />
+        </Route>
+
+        <Route element={<ProtectedRoute roles={['REGISTERED_AGENT']}><AppLayout /></ProtectedRoute>}>
+          <Route path="/agent/commissions" element={<AgentCommissionDashboard />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
 
         {/* Super Admin routes */}
@@ -172,6 +185,7 @@ export default function App() {
           <Route path="/super-admin/analytics" element={<Analytics />} />
           <Route path="/super-admin/activity" element={<ActivityLog />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/restore" element={<Restore />} />
         </Route>
 
         {/* Fallback routes */}

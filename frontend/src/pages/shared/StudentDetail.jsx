@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Plus, FileText, Loader2, Trash2, Receipt, CheckCircle2, CreditCard } from 'lucide-react';
+import { ArrowLeft, Edit, Plus, FileText, Loader2, Trash2, Receipt, CheckCircle2, CreditCard, Upload, Eye, ShieldCheck } from 'lucide-react';
 import DocumentUploadSection from '../../components/documents/DocumentUploadSection';
 import DocumentTimeline from '../../components/documents/DocumentTimeline';
+import EmgsPaymentCard from '../../components/payments/EmgsPaymentCard';
 import StudentAvatar from '../../components/common/StudentAvatar';
-import { studentAPI, applicationAPI, documentAPI } from '../../api/endpoints';
+import { studentAPI, applicationAPI, documentAPI, userAPI } from '../../api/endpoints';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/toast';
 import { Button } from '../../components/ui/button';
@@ -51,23 +52,73 @@ export default function StudentDetail() {
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
+  const [staff, setStaff] = useState([]);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [paymentAction, setPaymentAction] = useState(null);
 
   const canEdit = ['TENANT_ADMIN', 'STAFF', 'SUPER_ADMIN'].includes(user?.role);
   const canDelete = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canTransfer = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+  const canVerifyPayment = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(user?.role);
+
+  const handlePaymentProofUpload = async (applicationId, file) => {
+    if (!file) return;
+    setPaymentAction(`upload-${applicationId}`);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      await applicationAPI.uploadPaymentProof(applicationId, form);
+      toast.success('Payment proof uploaded');
+      await fetchAll();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Payment proof upload failed');
+    } finally {
+      setPaymentAction(null);
+    }
+  };
+
+  const handlePaymentVerification = async (applicationId) => {
+    if (!confirm('Verify this payment proof?')) return;
+    setPaymentAction(`verify-${applicationId}`);
+    try {
+      await applicationAPI.verifyPayment(applicationId);
+      toast.success('Payment verified');
+      await fetchAll();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Payment verification failed');
+    } finally {
+      setPaymentAction(null);
+    }
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [sRes, aRes, dRes] = await Promise.all([
-        studentAPI.get(id),
+      const sRes = await studentAPI.get(id);
+      setStudent(sRes.data.data);
+
+      const [aRes, dRes] = await Promise.allSettled([
         applicationAPI.list({ studentId: id, limit: 50 }),
         documentAPI.list(id),
       ]);
-      setStudent(sRes.data.data);
-      setApplications(aRes.data.data || []);
-      setDocuments(dRes.data.data || []);
-    } catch {
-      toast.error('Student not found');
+
+      if (aRes.status === 'fulfilled') {
+        setApplications(aRes.value.data.data || []);
+      } else {
+        setApplications([]);
+        toast.error('Failed to load student applications');
+      }
+
+      if (dRes.status === 'fulfilled') {
+        setDocuments(dRes.value.data.data || []);
+      } else {
+        setDocuments([]);
+        toast.error('Failed to load student documents');
+      }
+    } catch (err) {
+      const status = err.response?.status;
+      toast.error(status === 401 ? 'Session expired. Please log in again.' : 'Failed to load student data');
       navigate(-1);
     } finally {
       setLoading(false);
@@ -75,6 +126,28 @@ export default function StudentDetail() {
   }, [id, navigate]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    if (!canTransfer) return;
+    userAPI.list({ role: 'STAFF', limit: 200 })
+      .then((res) => setStaff(res.data.data || []))
+      .catch(() => setStaff([]));
+  }, [canTransfer]);
+
+  const handleTransfer = async () => {
+    if (!transferTo) return;
+    setTransferring(true);
+    try {
+      await studentAPI.transfer(id, transferTo);
+      toast.success('Student ownership transferred');
+      setTransferTo('');
+      await fetchAll();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Transfer failed');
+    } finally {
+      setTransferring(false);
+    }
+  };
 
   const handleDocumentUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -223,11 +296,11 @@ export default function StudentDetail() {
 
       {/* ── Overview Tab ── */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
+          <Card className={`h-full ${!canTransfer ? 'lg:col-span-2' : ''}`}>
             <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
                 {[
                   ['Full Name', student.fullName],
                   ['Passport No.', student.passportNumber],
@@ -242,17 +315,65 @@ export default function StudentDetail() {
                   ['Sponsor Name', student.sponsorName],
                   ['Sponsor Contact', student.sponsorContact],
                 ].map(([label, value]) => (
-                  <div key={label}>
+                  <div key={label} className="min-w-0">
                     <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="font-medium">{value || '—'}</p>
+                    <p className="break-words font-medium">{value || '—'}</p>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
+          {canTransfer && <div className="space-y-6">
+            {canTransfer && (
+              <Card>
+                <CardHeader><CardTitle>Ownership</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Current owner</p>
+                    <p className="font-medium">
+                      {student.createdBy
+                        ? `${student.createdBy.firstName} ${student.createdBy.lastName}`
+                        : 'Unassigned'}
+                      {student.createdBy?.role === 'TENANT_ADMIN' && (
+                        <span className="ml-1 text-xs text-muted-foreground">(admin)</span>
+                      )}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Staff see only the students assigned to them. Transfer to hand this profile to another staff / agent.
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <select
+                      value={transferTo}
+                      onChange={(e) => setTransferTo(e.target.value)}
+                      className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">Select staff / agent...</option>
+                      {staff.map((s) => (
+                        <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
+                      ))}
+                    </select>
+                    <Button size="sm" onClick={handleTransfer} disabled={transferring || !transferTo || transferTo === student.createdById}>
+                      {transferring ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Transfer
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
+            <CardHeader><CardTitle>Agent &amp; Source</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {student.sourceType === 'DIRECT_STUDENT' ? <p className="font-medium">Direct Student — No Agent Involved</p> : <><div><p className="text-xs text-muted-foreground">Source</p><p className="font-medium">{student.sourceType?.replaceAll('_',' ') || 'Historical / Unknown'}</p></div><div><p className="text-xs text-muted-foreground">Agent</p><p className="font-medium">{student.sourceAgent?.displayName || '—'}</p><p className="text-xs text-muted-foreground">{student.sourceAgent?.agencyName || student.sourceAgent?.email || student.sourceAgent?.phone || ''}</p></div></>}
+              <div><p className="text-xs text-muted-foreground">Assigned Internal Staff</p><p>{student.assignedStaff ? `${student.assignedStaff.firstName} ${student.assignedStaff.lastName}` : 'Unassigned'}</p></div>
+              {student.sourceUpdatedAt && <p className="text-xs text-muted-foreground">Last changed {formatDate(student.sourceUpdatedAt)}{student.sourceUpdatedBy ? ` by ${student.sourceUpdatedBy.firstName} ${student.sourceUpdatedBy.lastName}` : ''}</p>}
+            </CardContent>
+            </Card>
+          </div>}
+
+          <Card className="h-full">
               <CardHeader><CardTitle>Academic Background</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <AcademicRow label="SSC / O-Level" institution={student.sscInstitution} grade={student.sscGrade} year={student.sscYear} />
@@ -270,9 +391,9 @@ export default function StudentDetail() {
                   <p className="text-sm text-muted-foreground py-2">No academic records added.</p>
                 )}
               </CardContent>
-            </Card>
+          </Card>
 
-            <Card>
+          <Card className="h-full">
               <CardHeader><CardTitle>English Proficiency</CardTitle></CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -294,8 +415,7 @@ export default function StudentDetail() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -345,6 +465,8 @@ export default function StudentDetail() {
               <CardContent className="py-12 text-center text-sm text-muted-foreground">No applications yet.</CardContent>
             </Card>
           ) : (
+            applications.map((app) => <EmgsPaymentCard key={app.id} application={app} canVerify={canVerifyPayment} onOpenApplication={() => navigate(`/applications/${app.id}`)} />)
+            /* Legacy payment card retained below only for source history.
             applications.map((app) => {
               const paymentDone = !!app.paymentProofUrl;
               const verified = !!app.paymentVerifiedAt;
@@ -380,16 +502,77 @@ export default function StudentDetail() {
                       {chip(verified, verified ? 'Payment verified' : 'Not verified')}
                       {chip(invoiced, invoiced ? 'Invoice issued' : 'No invoice')}
                     </div>
-                    <div className="flex items-center gap-2 border-t border-border pt-3">
-                      <Button size="sm" variant="outline" disabled className="gap-1.5">
-                        <Receipt className="h-3.5 w-3.5" /> Generate Invoice
-                      </Button>
-                      <span className="text-[11px] text-muted-foreground">Invoice generation coming soon.</span>
+                    <div className="border-t border-border pt-3">
+                      {!app.offerLetterUrl ? (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2.5">
+                          <div>
+                            <p className="text-xs font-medium text-foreground">Payment upload locked</p>
+                            <p className="text-[11px] text-muted-foreground">Upload the Offer Letter first to enable payment proof.</p>
+                          </div>
+                          <Button size="sm" variant="outline" disabled className="gap-1.5 flex-shrink-0">
+                            <Upload className="h-3.5 w-3.5" /> Upload Proof
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5">
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">
+                              {paymentDone ? 'Payment proof received' : 'Offer letter ready — payment action available'}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {paymentDone ? 'Review the uploaded proof and verify when confirmed.' : 'Upload the student’s payment proof directly from this tab.'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {paymentDone ? (
+                              <>
+                                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => window.open(app.paymentProofUrl, '_blank', 'noopener,noreferrer')}>
+                                  <Eye className="h-3.5 w-3.5" /> View Proof
+                                </Button>
+                                {canVerifyPayment && !verified && (
+                                  <Button size="sm" className="gap-1.5" disabled={paymentAction === `verify-${app.id}`} onClick={() => handlePaymentVerification(app.id)}>
+                                    {paymentAction === `verify-${app.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                                    Verify Payment
+                                  </Button>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  id={`payment-proof-${app.id}`}
+                                  type="file"
+                                  accept="image/*,.pdf"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    handlePaymentProofUpload(app.id, e.target.files?.[0]);
+                                    e.target.value = '';
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5"
+                                  disabled={paymentAction === `upload-${app.id}`}
+                                  onClick={() => document.getElementById(`payment-proof-${app.id}`)?.click()}
+                                >
+                                  {paymentAction === `upload-${app.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                                  Upload Payment Proof
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-3 flex items-center gap-2">
+                        <Button size="sm" variant="outline" disabled className="gap-1.5">
+                          <Receipt className="h-3.5 w-3.5" /> Generate Invoice
+                        </Button>
+                        <span className="text-[11px] text-muted-foreground">Invoice generation coming soon.</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
               );
-            })
+            }) */
           )}
         </div>
       )}

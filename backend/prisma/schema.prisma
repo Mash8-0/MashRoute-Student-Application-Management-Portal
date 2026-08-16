@@ -7,261 +7,147 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
-
-enum Role {
-  SUPER_ADMIN
-  TENANT_ADMIN
-  STAFF
-}
-
-enum TenantStatus {
-  ACTIVE
-  SUSPENDED
-  PENDING
-  REJECTED
-  CANCELLED
-}
-
-enum ApplicationStatus {
-  DRAFT
-  SUBMITTED
-  ACCEPTED
-  AWAITING_VERIFICATION
-  SENT_TO_UNIVERSITY
-  AWAITING_OFFER_LETTER
-  OFFER_LETTER_ISSUED
-  EMGS_PROCESSING
-  COMPLETED
-  REJECTED
-  // Legacy values — kept so existing rows are not broken
-  LOE_PROCESSING
-  LOE_APPROVED
-  PAYMENT_PENDING
-  EMGS_SUBMITTED
-  EMGS_APPROVED
-  EVAL_APPROVED
-  VISA_APPROVED
-  AIRPORT_CLEARANCE
-}
-
-enum DocumentType {
-  PASSPORT
-  SSC_CERTIFICATE
-  HSC_CERTIFICATE
-  DIPLOMA
-  BACHELOR_DEGREE
-  MASTERS_DEGREE
-  TRANSCRIPT
-  BANK_STATEMENT
-  IELTS_CERTIFICATE
-  PTE_CERTIFICATE
-  MOI_CERTIFICATE
-  PHOTO
-  OFFER_LETTER
-  EMGS_DOCUMENT
-  EVAL_DOCUMENT
-  VISA_DOCUMENT
-  MEDICAL_CERTIFICATE
-  ADDITIONAL
-  PASSPORT_FULL_SCAN
-  ACADEMIC_DOCUMENTS
-  ENGLISH_PROFICIENCY
-  FLIGHT_TICKET
-  PAYMENT_PROOF
-  TUITION_PROOF
-  INVOICE
-  TUITION_INVOICE
-  MDAC_CONFIRMATION
-}
-
-enum MdacStatus {
-  NOT_REQUIRED
-  REQUIRED
-  SUBMITTED
-  VERIFIED
-  NEEDS_REVIEW
-}
-
-enum DocumentStatus {
-  PENDING
-  UPLOADED
-  VERIFIED
-  REJECTED
-  EXPIRED
-}
-
-enum PaymentStatus {
-  PENDING
-  PARTIAL
-  PAID
-  OVERDUE
-  CANCELLED
-  REFUNDED
-}
-
-enum NotificationType {
-  STATUS_CHANGED
-  DOCUMENT_MISSING
-  PAYMENT_PENDING
-  ASSIGNMENT
-  APPROVAL
-  REJECTION
-  SYSTEM
-}
-
-enum SubscriptionPlan {
-  STARTER
-  PROFESSIONAL
-  ENTERPRISE
-}
-
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-// ─── Tenants ──────────────────────────────────────────────────────────────────
-
 model Tenant {
-  id                 String           @id @default(uuid())
-  name               String
-  slug               String           @unique
-  domain             String?          @unique
-  logo               String?
-  website            String?
-  email              String           @unique
-  phone              String?
-  address            String?
-  country            String?
-  status             TenantStatus     @default(PENDING)
-  plan               SubscriptionPlan @default(STARTER)
-  maxUsers           Int              @default(10)
-  maxStudents        Int              @default(100)
-  trialEndsAt        DateTime?
-  subscriptionEndsAt DateTime?
-  settings           Json?
-
-  createdSource       String?   @default("self_signup")
-  contactPersonName   String?
-  contactPersonEmail  String?
-  contactPersonPhone  String?
-  verificationType    String?
-  verificationDocUrl  String?
-  verificationDocName String?
-  submittedAt         DateTime?
-  approvedById        String?
-  approvedAt          DateTime?
-  rejectionReason     String?
-
-  // WhatsApp (Meta Cloud API) notifications — per-tenant toggle + config (recipients, events)
-  whatsappEnabled Boolean @default(false)
-  whatsappConfig  Json?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-
-  users                 User[]
-  students              Student[]
+  id                    String                       @id @default(uuid())
+  name                  String
+  slug                  String                       @unique
+  domain                String?                      @unique
+  logo                  String?
+  email                 String                       @unique
+  phone                 String?
+  address               String?
+  country               String?
+  status                TenantStatus                 @default(PENDING)
+  plan                  SubscriptionPlan             @default(STARTER)
+  maxUsers              Int                          @default(10)
+  maxStudents           Int                          @default(100)
+  trialEndsAt           DateTime?
+  subscriptionEndsAt    DateTime?
+  settings              Json?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  deletedAt             DateTime?
+  approvedAt            DateTime?
+  approvedById          String?
+  contactPersonEmail    String?
+  contactPersonName     String?
+  contactPersonPhone    String?
+  createdSource         String?                      @default("self_signup")
+  rejectionReason       String?
+  submittedAt           DateTime?
+  website               String?
+  verificationDocName   String?
+  verificationDocUrl    String?
+  verificationType      String?
+  whatsappConfig        Json?
+  whatsappEnabled       Boolean                      @default(false)
+  activityLogs          ActivityLog[]
+  agents                Agent[]
+  agentCommissions      AgentCommission[]
   applications          Application[]
+  Intake                Intake[]
+  IntakeAuditLog        IntakeAuditLog[]
+  IntakeSetting         IntakeSetting?
+  Invoice               Invoice[]
+  InvoiceAuditLog       InvoiceAuditLog[]
+  InvoiceRequest        InvoiceRequest[]
+  InvoiceSequence       InvoiceSequence[]
+  LateIntakeApproval    LateIntakeApproval[]
+  notifications         Notification[]
+  payments              Payment[]
+  students              Student[]
+  subscriptions         Subscription[]
   universities          University[]
-  // Master universities assigned to this tenant by the super admin.
-  assignedUniversities  University[]                 @relation("UniversityAssignments")
   universityCommissions UniversityCommission[]
   commissionPolicies    UniversityCommissionPolicy[]
-  payments              Payment[]
-  notifications         Notification[]
-  activityLogs          ActivityLog[]
-  subscriptions         Subscription[]
+  users                 User[]
+  assignedUniversities  University[]                 @relation("UniversityAssignments")
 
   @@index([slug])
   @@index([status])
 }
 
-// ─── Users ────────────────────────────────────────────────────────────────────
-
 model User {
-  id                String    @id @default(uuid())
-  tenantId          String?
-  email             String    @unique
-  password          String
-  firstName         String
-  lastName          String
-  phone             String?
-  avatar            String?
-  role              Role      @default(STAFF)
-  // Agent tier (STANDARD..MASTER) — drives per-university commission. See utils/agentCategories.js
-  agentCategory     String?   @default("STANDARD")
-  isActive          Boolean   @default(true)
-  isEmailVerified   Boolean   @default(false)
-  emailVerifyToken  String?
-  emailVerifyExpiry DateTime?
-  resetToken        String?
-  resetTokenExpiry  DateTime?
-  refreshToken      String?
-  lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  deletedAt         DateTime?
-
-  tenant                Tenant?           @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  assignedApplications  Application[]     @relation("AssignedAgent")
-  createdApplications   Application[]     @relation("CreatedBy")
-  acceptedApplications  Application[]     @relation("AcceptedBy")
-  uploadedOfferLetters  Application[]     @relation("OfferLetterUploadedBy")
-  uploadedPaymentProofs Application[]     @relation("PaymentProofUploadedBy")
-  verifiedPayments      Application[]     @relation("PaymentVerifiedBy")
-  issuedInvoices        Application[]     @relation("InvoiceIssuedBy")
-  uploadedEvisas        Application[]     @relation("EvisaUploadedBy")
-  uploadedTuitionProofs Application[]     @relation("TuitionProofUploadedBy")
-  verifiedTuitions      Application[]     @relation("TuitionVerifiedBy")
-  statusHistory         StatusHistory[]
-  notifications         Notification[]
-  activityLogs          ActivityLog[]
-  extractionLogs        ExtractionLog[]
-  notes                 ApplicationNote[]
-  generatedLOEs         LOE[]             @relation("LOEGeneratedBy")
-  uploadedDocuments     Document[]        @relation("DocumentUploader")
-  verifiedMdacs         Application[]     @relation("MdacVerifiedBy")
+  id                                                        String               @id @default(uuid())
+  tenantId                                                  String?
+  email                                                     String               @unique
+  password                                                  String
+  firstName                                                 String
+  lastName                                                  String
+  phone                                                     String?
+  avatar                                                    String?
+  role                                                      Role                 @default(STAFF)
+  isActive                                                  Boolean              @default(true)
+  isEmailVerified                                           Boolean              @default(false)
+  emailVerifyToken                                          String?
+  emailVerifyExpiry                                         DateTime?
+  resetToken                                                String?
+  resetTokenExpiry                                          DateTime?
+  refreshToken                                              String?
+  lastLoginAt                                               DateTime?
+  createdAt                                                 DateTime             @default(now())
+  updatedAt                                                 DateTime             @updatedAt
+  deletedAt                                                 DateTime?
+  agentCategory                                             String?              @default("STANDARD")
+  activityLogs                                              ActivityLog[]
+  assignedAgents                                            Agent[]              @relation("AgentAssignedStaff")
+  createdAgents                                             Agent[]              @relation("AgentCreatedBy")
+  linkedAgent                                               Agent?               @relation("AgentLinkedUser")
+  approvedAgentCommissions                                  AgentCommission[]    @relation("AgentCommissionApprovedBy")
+  createdAgentCommissions                                   AgentCommission[]    @relation("AgentCommissionCreatedBy")
+  acceptedApplications                                      Application[]        @relation("AcceptedBy")
+  assignedApplications                                      Application[]        @relation("AssignedAgent")
+  createdApplications                                       Application[]        @relation("CreatedBy")
+  uploadedEvisas                                            Application[]        @relation("EvisaUploadedBy")
+  issuedInvoices                                            Application[]        @relation("InvoiceIssuedBy")
+  Application_Application_mdacVerifiedByIdToUser            Application[]        @relation("Application_mdacVerifiedByIdToUser")
+  uploadedOfferLetters                                      Application[]        @relation("OfferLetterUploadedBy")
+  uploadedPaymentProofs                                     Application[]        @relation("PaymentProofUploadedBy")
+  verifiedPayments                                          Application[]        @relation("PaymentVerifiedBy")
+  uploadedTuitionProofs                                     Application[]        @relation("TuitionProofUploadedBy")
+  verifiedTuitions                                          Application[]        @relation("TuitionVerifiedBy")
+  notes                                                     ApplicationNote[]
+  uploadedDocuments                                         Document[]           @relation("DocumentUploader")
+  extractionLogs                                            ExtractionLog[]
+  Intake_Intake_createdByIdToUser                           Intake[]             @relation("Intake_createdByIdToUser")
+  Intake_Intake_updatedByIdToUser                           Intake[]             @relation("Intake_updatedByIdToUser")
+  IntakeAuditLog                                            IntakeAuditLog[]
+  Invoice                                                   Invoice[]
+  generatedLOEs                                             LOE[]                @relation("LOEGeneratedBy")
+  LateIntakeApproval_LateIntakeApproval_requestedByIdToUser LateIntakeApproval[] @relation("LateIntakeApproval_requestedByIdToUser")
+  LateIntakeApproval_LateIntakeApproval_reviewedByIdToUser  LateIntakeApproval[] @relation("LateIntakeApproval_reviewedByIdToUser")
+  notifications                                             Notification[]
+  Payment_Payment_rejectedByUserIdToUser                    Payment[]            @relation("Payment_rejectedByUserIdToUser")
+  Payment_Payment_submittedByUserIdToUser                   Payment[]            @relation("Payment_submittedByUserIdToUser")
+  Payment_Payment_verifiedByUserIdToUser                    Payment[]            @relation("Payment_verifiedByUserIdToUser")
+  statusHistory                                             StatusHistory[]
+  assignedStudents                                          Student[]            @relation("StudentAssignedStaff")
+  createdStudents                                           Student[]            @relation("StudentCreatedBy")
+  sourceUpdatedStudents                                     Student[]            @relation("StudentSourceUpdatedBy")
+  tenant                                                    Tenant?              @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([email])
   @@index([role])
 }
 
-// ─── Students ─────────────────────────────────────────────────────────────────
-
 model Student {
-  id                       String    @id @default(uuid())
+  id                       String             @id @default(uuid())
   tenantId                 String
-  // Personal Info
   fullName                 String
   passportNumber           String?
-  passportNumberNormalized String?
   dateOfBirth              DateTime?
   gender                   Gender?
   nationality              String?
   phone                    String?
-  whatsapp                 String? // WhatsApp number for notifications (falls back to phone)
   email                    String?
   address                  String?
   city                     String?
   country                  String?
-  // Emergency & Sponsor
   sponsorName              String?
   sponsorContact           String?
   emergencyContact         String?
   emergencyPhone           String?
-  // Academic Info
   sscGrade                 String?
   sscYear                  Int?
   sscInstitution           String?
@@ -277,284 +163,361 @@ model Student {
   mastersGrade             String?
   mastersYear              Int?
   mastersInstitution       String?
-  phdGrade                 String?
-  phdYear                  Int?
-  phdInstitution           String?
-  gpa                      Decimal?  @db.Decimal(4, 2)
-  // English Proficiency
-  hasIELTS                 Boolean   @default(false)
-  ieltsScore               Decimal?  @db.Decimal(3, 1)
+  gpa                      Decimal?           @db.Decimal(4, 2)
+  hasIELTS                 Boolean            @default(false)
+  ieltsScore               Decimal?           @db.Decimal(3, 1)
   ieltsExpiry              DateTime?
-  hasPTE                   Boolean   @default(false)
+  hasPTE                   Boolean            @default(false)
   pteScore                 Int?
   pteExpiry                DateTime?
-  hasMOI                   Boolean   @default(false)
-  // Photo
+  hasMOI                   Boolean            @default(false)
   photo                    String?
-  // Google Drive
+  isActive                 Boolean            @default(true)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  deletedAt                DateTime?
   driveFolderId            String?
   driveFolderName          String?
-  // Meta
-  isActive                 Boolean   @default(true)
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
-  deletedAt                DateTime?
-
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  applications Application[]
-  documents    Document[]
-  payments     Payment[]
+  whatsapp                 String?
+  passportNumberNormalized String?
+  createdById              String?
+  sourceType               StudentSourceType?
+  sourceAgentId            String?
+  assignedStaffId          String?
+  sourceUpdatedByUserId    String?
+  sourceUpdatedAt          DateTime?
+  agentCommissions         AgentCommission[]
+  applications             Application[]
+  documents                Document[]
+  Invoice                  Invoice[]
+  InvoiceRequest           InvoiceRequest[]
+  payments                 Payment[]
+  assignedStaff            User?              @relation("StudentAssignedStaff", fields: [assignedStaffId], references: [id])
+  createdBy                User?              @relation("StudentCreatedBy", fields: [createdById], references: [id])
+  sourceAgent              Agent?             @relation(fields: [sourceAgentId], references: [id])
+  sourceUpdatedBy          User?              @relation("StudentSourceUpdatedBy", fields: [sourceUpdatedByUserId], references: [id])
+  tenant                   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, passportNumberNormalized], name: "student_tenant_passport_normalized_unique", map: "student_tenant_passport_normalized_unique")
   @@index([tenantId])
   @@index([passportNumber])
   @@index([tenantId, email])
   @@index([tenantId, phone])
+  @@index([tenantId, createdById])
+  @@index([tenantId, sourceType])
+  @@index([tenantId, sourceAgentId])
+  @@index([tenantId, assignedStaffId])
   @@index([fullName])
 }
 
-// ─── Universities ─────────────────────────────────────────────────────────────
+model Agent {
+  id                      String            @id @default(uuid())
+  tenantId                String
+  type                    AgentType
+  displayName             String
+  agencyName              String?
+  contactPerson           String?
+  email                   String?
+  phone                   String?
+  whatsapp                String?
+  address                 String?
+  notes                   String?
+  status                  AgentStatus       @default(ACTIVE)
+  linkedUserId            String?           @unique
+  assignedInternalStaffId String?
+  createdByUserId         String
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  archivedAt              DateTime?
+  assignedInternalStaff   User?             @relation("AgentAssignedStaff", fields: [assignedInternalStaffId], references: [id])
+  createdBy               User              @relation("AgentCreatedBy", fields: [createdByUserId], references: [id])
+  linkedUser              User?             @relation("AgentLinkedUser", fields: [linkedUserId], references: [id])
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  commissions             AgentCommission[]
+  students                Student[]
+
+  @@index([tenantId, displayName])
+  @@index([tenantId, type, status])
+  @@index([tenantId, email])
+  @@index([tenantId, linkedUserId])
+}
+
+model AgentCommission {
+  id                   String                @id @default(uuid())
+  tenantId             String
+  studentId            String
+  agentId              String
+  universityId         String?
+  applicationId        String?
+  commissionType       AgentCommissionType
+  currency             String                @default("MYR")
+  grossCommission      Float                 @default(0)
+  agentCommission      Float                 @default(0)
+  tenantCommission     Float                 @default(0)
+  bonusAmount          Float                 @default(0)
+  eligibilityMilestone String?
+  status               AgentCommissionStatus @default(NOT_ELIGIBLE)
+  expectedPayoutDate   DateTime?
+  paidAt               DateTime?
+  paymentReference     String?
+  paymentProofUrl      String?
+  agentInvoiceUrl      String?
+  internalNotes        String?
+  createdByUserId      String
+  approvedByUserId     String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  agent                Agent                 @relation(fields: [agentId], references: [id])
+  application          Application?          @relation(fields: [applicationId], references: [id])
+  approvedBy           User?                 @relation("AgentCommissionApprovedBy", fields: [approvedByUserId], references: [id])
+  createdBy            User                  @relation("AgentCommissionCreatedBy", fields: [createdByUserId], references: [id])
+  student              Student               @relation(fields: [studentId], references: [id])
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university           University?           @relation(fields: [universityId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, agentId])
+  @@index([studentId])
+  @@index([applicationId])
+}
 
 model University {
-  id        String   @id @default(uuid())
-  tenantId  String?
-  name      String
-  code      String? // "University ID" set by super admin; used in document file names
-  country   String
-  city      String?
-  website   String?
-  email     String? // contact mail — offer-letter requests are sent here
-  phone     String?
-  courses   Json? // [{ level: 'Foundation'|'Diploma'|..., name: 'Foundation in Science' }]
-  intakes   Json? // admin-set intake labels, e.g. ["January 2026", "September 2026"]
-  logo      String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tenant             Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                 String                       @id @default(uuid())
+  tenantId           String?
+  name               String
+  country            String
+  city               String?
+  website            String?
+  logo               String?
+  isActive           Boolean                      @default(true)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  code               String?
+  courses            Json?
+  email              String?
+  phone              String?
+  intakes            Json?
+  agentCommissions   AgentCommission[]
   applications       Application[]
-  // Super-admin master universities are assigned to one or more tenants.
-  assignedTenants    Tenant[]                     @relation("UniversityAssignments")
-  // Per-tenant commission rates by agent category.
+  Intake             Intake[]
+  tenant             Tenant?                      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   commissions        UniversityCommission[]
   commissionPolicies UniversityCommissionPolicy[]
+  assignedTenants    Tenant[]                     @relation("UniversityAssignments")
 
   @@index([tenantId])
 }
 
-// Tenant-scoped commission terms for a university (when/how commission is released).
 model UniversityCommissionPolicy {
-  id             String   @id @default(uuid())
+  id             String     @id @default(uuid())
   tenantId       String
   universityId   String
-  releaseTiming  String   @default("AFTER_REGISTRATION") // UPFRONT | AFTER_REGISTRATION | AFTER_ENROLLMENT | ON_COMPLETION
-  commissionType String? // e.g. "Claimable / Upfront"
-  payoutTime     String? // e.g. "30 to 60 Days"
-  payoutMethod   String? // e.g. "Bank Transfer"
-  specialBonus   String? // e.g. "If applicable" / "RM 500 per student"
+  releaseTiming  String     @default("AFTER_REGISTRATION")
   notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  university University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  commissionType String?
+  payoutMethod   String?
+  payoutTime     String?
+  specialBonus   String?
+  tenant         Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university     University @relation(fields: [universityId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, universityId])
   @@index([universityId])
 }
 
-// Commission a tenant pays/earns for a university, by agent tier.
-// Tenant-scoped because the same master university is shared across many tenants.
 model UniversityCommission {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   tenantId     String
   universityId String
-  course       String   @default("") // program/course name; "" = applies to all programs (default)
-  category     String // agent category value (STANDARD..MASTER)
-  amount       Float    @default(0)
-  type         String   @default("FIXED") // 'FIXED' | 'PERCENTAGE'
-  currency     String   @default("MYR")
+  category     String
+  amount       Float      @default(0)
+  type         String     @default("FIXED")
+  currency     String     @default("MYR")
   notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  university University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  course       String     @default("")
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university   University @relation(fields: [universityId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, universityId, course, category])
   @@index([tenantId])
   @@index([universityId])
 }
 
-// ─── Applications ─────────────────────────────────────────────────────────────
-
 model Application {
-  id                         String            @id @default(uuid())
-  tenantId                   String
-  studentId                  String
-  universityId               String?
-  agentId                    String?
-  createdById                String?
-  // Application Details
-  referenceNo                String            @unique
-  program                    String?
-  intake                     String?
-  intakeYear                 Int?
-  country                    String?
-  status                     ApplicationStatus @default(DRAFT)
-  priority                   Priority          @default(MEDIUM)
-  progressPct                Int               @default(0)
-  // Rejection
-  rejectionReason            String?
-  // Acceptance
-  isAccepted                 Boolean           @default(false)
-  acceptedById               String?
-  acceptedAt                 DateTime?
-  // Offer Letter
-  offerLetterUrl             String?
-  offerLetterUploadedById    String?
-  offerLetterUploadedAt      DateTime?
-  // Payment Proof
-  paymentProofUrl            String?
-  paymentProofUploadedById   String?
-  paymentProofUploadedAt     DateTime?
-  // Payment Verification
-  paymentVerifiedById        String?
-  paymentVerifiedAt          DateTime?
-  // Invoice
-  invoiceIssuedById          String?
-  invoiceIssuedAt            DateTime?
-  // EMGS Progress
-  emgsPercentage             Int               @default(0)
-  // Post-eVAL workflow (separate from the EMGS percentage; only active once 70% eVAL Approved is reached)
-  // null | AWAITING_EVISA | EVISA_APPROVED | UNDER_ARRIVAL | ARRIVAL_COMPLETED
-  postEvalStatus             String?
-  // Post-eVAL approval letters (uploaded in the "Awaiting for eVisa" stage)
-  emgsApprovalUrl            String?
-  emgsApprovalUploadedById   String?
-  emgsApprovalUploadedAt     DateTime?
-  evalApprovalUrl            String?
-  evalApprovalUploadedById   String?
-  evalApprovalUploadedAt     DateTime?
-  // eVisa (post-EVAL stage)
-  evisaUrl                   String?
-  evisaUploadedById          String?
-  evisaUploadedAt            DateTime?
-  // Arrival
-  arrivalDate                DateTime?
-  flightDate                 DateTime?
-  arrivalTimezone            String?            @default("Asia/Kuala_Lumpur")
-  arrivalStatus              String?
-  flightTicketUrl            String?
-  flightNumber               String?
-  airline                    String?
-  lastPortOfEmbarkation      String?
-  modeOfTravel               String?
-  malaysiaAccommodationName  String?
-  malaysiaAccommodationType  String?
-  malaysiaAccommodationAddress String?
-  malaysiaAccommodationState String?
-  malaysiaAccommodationCity  String?
-  malaysiaAccommodationPostcode String?
-  mdacRequired               Boolean            @default(true)
-  mdacStatus                 MdacStatus         @default(REQUIRED)
-  mdacSubmittedAt            DateTime?
-  mdacProofUrl               String?
-  mdacProofDocumentId        String?
-  mdacVerifiedAt             DateTime?
-  mdacVerifiedById           String?
-  mdacReviewNotes            String?
-  mdacPreviousArrivalDate    DateTime?
-  // Tuition Proof / Verification / Invoice
-  tuitionProofUrl            String?
-  tuitionProofUploadedById   String?
-  tuitionProofUploadedAt     DateTime?
-  tuitionVerificationStatus  String?           @default("NONE") // NONE | PENDING | VERIFIED | REJECTED
-  tuitionVerificationRemarks String?
-  tuitionVerifiedById        String?
-  tuitionVerifiedAt          DateTime?
-  tuitionInvoiceIssuedById   String?
-  tuitionInvoiceIssuedAt     DateTime?
-  // Commission payout tracking (drives commission_eligible / commission_paid notifications)
-  commissionStatus           String?           @default("PENDING") // PENDING | ELIGIBLE | PAID
-  commissionStatusAt         DateTime?
-  // Meta
-  submittedAt                DateTime?
-  completedAt                DateTime?
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
-  deletedAt                  DateTime?
-
-  tenant                 Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  student                Student           @relation(fields: [studentId], references: [id])
-  university             University?       @relation(fields: [universityId], references: [id])
-  agent                  User?             @relation("AssignedAgent", fields: [agentId], references: [id])
-  createdBy              User?             @relation("CreatedBy", fields: [createdById], references: [id])
-  acceptedBy             User?             @relation("AcceptedBy", fields: [acceptedById], references: [id])
-  offerLetterUploadedBy  User?             @relation("OfferLetterUploadedBy", fields: [offerLetterUploadedById], references: [id])
-  paymentProofUploadedBy User?             @relation("PaymentProofUploadedBy", fields: [paymentProofUploadedById], references: [id])
-  paymentVerifiedBy      User?             @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id])
-  invoiceIssuedBy        User?             @relation("InvoiceIssuedBy", fields: [invoiceIssuedById], references: [id])
-  evisaUploadedBy        User?             @relation("EvisaUploadedBy", fields: [evisaUploadedById], references: [id])
-  tuitionProofUploadedBy User?             @relation("TuitionProofUploadedBy", fields: [tuitionProofUploadedById], references: [id])
-  tuitionVerifiedBy      User?             @relation("TuitionVerifiedBy", fields: [tuitionVerifiedById], references: [id])
-  mdacVerifiedBy         User?             @relation("MdacVerifiedBy", fields: [mdacVerifiedById], references: [id])
-  documents              Document[]
-  payments               Payment[]
-  statusHistory          StatusHistory[]
-  notes                  ApplicationNote[]
-  notifications          Notification[]
-  emailLogs              EmailLog[]
-  loe                    LOE?
+  id                                      String               @id @default(uuid())
+  tenantId                                String
+  studentId                               String
+  universityId                            String?
+  agentId                                 String?
+  createdById                             String?
+  referenceNo                             String               @unique
+  program                                 String?
+  intake                                  String?
+  intakeYear                              Int?
+  country                                 String?
+  status                                  ApplicationStatus    @default(DRAFT)
+  priority                                Priority             @default(MEDIUM)
+  progressPct                             Int                  @default(0)
+  rejectionReason                         String?
+  submittedAt                             DateTime?
+  completedAt                             DateTime?
+  createdAt                               DateTime             @default(now())
+  updatedAt                               DateTime             @updatedAt
+  deletedAt                               DateTime?
+  acceptedAt                              DateTime?
+  acceptedById                            String?
+  emgsPercentage                          Int                  @default(0)
+  invoiceIssuedAt                         DateTime?
+  invoiceIssuedById                       String?
+  isAccepted                              Boolean              @default(false)
+  offerLetterUploadedAt                   DateTime?
+  offerLetterUploadedById                 String?
+  offerLetterUrl                          String?
+  paymentProofUploadedAt                  DateTime?
+  paymentProofUploadedById                String?
+  paymentProofUrl                         String?
+  paymentVerifiedAt                       DateTime?
+  paymentVerifiedById                     String?
+  emgsPaymentStatus                       EmgsPaymentStatus    @default(NOT_CONFIGURED)
+  emgsSetupDecision                       String?
+  emgsNotRequiredReason                   String?
+  emgsNotRequiredNote                     String?
+  emgsSetupDecidedAt                      DateTime?
+  emgsSetupDecidedById                    String?
+  arrivalDate                             DateTime?
+  arrivalStatus                           String?
+  flightTicketUrl                         String?
+  tuitionInvoiceIssuedAt                  DateTime?
+  tuitionInvoiceIssuedById                String?
+  tuitionProofUploadedAt                  DateTime?
+  tuitionProofUploadedById                String?
+  tuitionProofUrl                         String?
+  tuitionVerifiedAt                       DateTime?
+  tuitionVerifiedById                     String?
+  evisaUploadedAt                         DateTime?
+  evisaUploadedById                       String?
+  evisaUrl                                String?
+  tuitionVerificationRemarks              String?
+  tuitionVerificationStatus               String?              @default("NONE")
+  flightDate                              DateTime?
+  postEvalStatus                          String?
+  emgsApprovalUploadedAt                  DateTime?
+  emgsApprovalUploadedById                String?
+  emgsApprovalUrl                         String?
+  evalApprovalUploadedAt                  DateTime?
+  evalApprovalUploadedById                String?
+  evalApprovalUrl                         String?
+  commissionStatus                        String?              @default("PENDING")
+  commissionStatusAt                      DateTime?
+  commissionAmount                        Float?
+  commissionCategory                      String?
+  commissionCourse                        String?
+  commissionCurrency                      String?              @default("MYR")
+  commissionType                          String?
+  englishProficiency                      EnglishProficiency   @default(NONE)
+  campus                                  String?
+  campusId                                String?
+  campusCode                              String?
+  programmeId                             String?
+  airline                                 String?
+  arrivalTimezone                         String?              @default("Asia/Kuala_Lumpur")
+  flightNumber                            String?
+  lastPortOfEmbarkation                   String?
+  malaysiaAccommodationAddress            String?
+  malaysiaAccommodationCity               String?
+  malaysiaAccommodationName               String?
+  malaysiaAccommodationPostcode           String?
+  malaysiaAccommodationState              String?
+  malaysiaAccommodationType               String?
+  mdacPreviousArrivalDate                 DateTime?
+  mdacProofDocumentId                     String?
+  mdacProofUrl                            String?
+  mdacRequired                            Boolean              @default(true)
+  mdacReviewNotes                         String?
+  mdacStatus                              MdacStatus           @default(REQUIRED)
+  mdacSubmittedAt                         DateTime?
+  mdacVerifiedAt                          DateTime?
+  mdacVerifiedById                        String?
+  modeOfTravel                            String?
+  intakeId                                String?
+  legacyIntake                            String?
+  agentCommissions                        AgentCommission[]
+  acceptedBy                              User?                @relation("AcceptedBy", fields: [acceptedById], references: [id])
+  agent                                   User?                @relation("AssignedAgent", fields: [agentId], references: [id])
+  createdBy                               User?                @relation("CreatedBy", fields: [createdById], references: [id])
+  evisaUploadedBy                         User?                @relation("EvisaUploadedBy", fields: [evisaUploadedById], references: [id])
+  intakeRecord                            Intake?              @relation(fields: [intakeId], references: [id])
+  invoiceIssuedBy                         User?                @relation("InvoiceIssuedBy", fields: [invoiceIssuedById], references: [id])
+  User_Application_mdacVerifiedByIdToUser User?                @relation("Application_mdacVerifiedByIdToUser", fields: [mdacVerifiedById], references: [id])
+  offerLetterUploadedBy                   User?                @relation("OfferLetterUploadedBy", fields: [offerLetterUploadedById], references: [id])
+  paymentProofUploadedBy                  User?                @relation("PaymentProofUploadedBy", fields: [paymentProofUploadedById], references: [id])
+  paymentVerifiedBy                       User?                @relation("PaymentVerifiedBy", fields: [paymentVerifiedById], references: [id])
+  student                                 Student              @relation(fields: [studentId], references: [id])
+  tenant                                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tuitionProofUploadedBy                  User?                @relation("TuitionProofUploadedBy", fields: [tuitionProofUploadedById], references: [id])
+  tuitionVerifiedBy                       User?                @relation("TuitionVerifiedBy", fields: [tuitionVerifiedById], references: [id])
+  university                              University?          @relation(fields: [universityId], references: [id])
+  notes                                   ApplicationNote[]
+  documents                               Document[]
+  EmailLog                                EmailLog[]
+  Invoice                                 Invoice[]
+  InvoiceRequest                          InvoiceRequest[]
+  loe                                     LOE?
+  LateIntakeApproval                      LateIntakeApproval[]
+  notifications                           Notification[]
+  payments                                Payment[]
+  statusHistory                           StatusHistory[]
 
   @@index([tenantId])
   @@index([studentId])
   @@index([agentId])
   @@index([status])
   @@index([referenceNo])
+  @@index([intakeId])
+  @@index([mdacVerifiedById])
   @@index([tenantId, arrivalDate])
-  @@index([tenantId, mdacStatus])
   @@index([tenantId, mdacRequired])
   @@index([tenantId, mdacStatus, arrivalDate])
-  @@index([mdacVerifiedById])
+  @@index([tenantId, mdacStatus])
 }
 
-// ─── Documents ────────────────────────────────────────────────────────────────
-
 model Document {
-  id                 String         @id @default(uuid())
+  id                 String          @id @default(uuid())
   tenantId           String
   studentId          String
   applicationId      String?
   uploadedById       String?
-  uploadedBy         User?          @relation("DocumentUploader", fields: [uploadedById], references: [id])
   type               DocumentType
-  status             DocumentStatus @default(PENDING)
+  status             DocumentStatus  @default(PENDING)
   originalName       String
   fileName           String
   fileUrl            String
   fileSize           Int?
   mimeType           String?
   publicId           String?
-  driveViewLink      String?
-  fileSource         String?        @default("local")
-  driveFolderId      String?
   expiryDate         DateTime?
   notes              String?
-  documentStage      String?
-  verificationStatus String?        @default("NONE")
-  verifiedById       String?
-  verifiedAt         DateTime?
-  rejectedReason     String?
-  isActive           Boolean        @default(true)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
   deletedAt          DateTime?
-
-  student        Student         @relation(fields: [studentId], references: [id])
-  application    Application?    @relation(fields: [applicationId], references: [id])
-  extractionLogs ExtractionLog[]
+  driveFolderId      String?
+  driveViewLink      String?
+  fileSource         String?         @default("local")
+  documentStage      String?
+  rejectedReason     String?
+  verificationStatus String?         @default("NONE")
+  verifiedAt         DateTime?
+  verifiedById       String?
+  application        Application?    @relation(fields: [applicationId], references: [id])
+  student            Student         @relation(fields: [studentId], references: [id])
+  uploadedBy         User?           @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  extractionLogs     ExtractionLog[]
+  Payment            Payment[]
 
   @@index([tenantId])
   @@index([studentId])
@@ -562,36 +525,244 @@ model Document {
   @@index([type])
 }
 
-// ─── Payments ─────────────────────────────────────────────────────────────────
-
 model Payment {
-  id            String        @id @default(uuid())
-  tenantId      String
-  studentId     String
-  applicationId String?
-  invoiceNo     String        @unique
-  amount        Decimal       @db.Decimal(12, 2)
-  currency      String        @default("USD")
-  status        PaymentStatus @default(PENDING)
-  dueDate       DateTime?
-  paidAt        DateTime?
-  receiptUrl    String?
-  notes         String?
-  description   String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  student     Student      @relation(fields: [studentId], references: [id])
-  application Application? @relation(fields: [applicationId], references: [id])
+  id                                   String           @id @default(uuid())
+  tenantId                             String
+  studentId                            String
+  applicationId                        String?
+  invoiceNo                            String?          @unique
+  amount                               Decimal          @db.Decimal(12, 2)
+  currency                             String           @default("MYR")
+  status                               PaymentStatus    @default(PENDING)
+  dueDate                              DateTime?
+  paidAt                               DateTime?
+  receiptUrl                           String?
+  notes                                String?
+  description                          String?
+  createdAt                            DateTime         @default(now())
+  updatedAt                            DateTime         @updatedAt
+  paymentDate                          DateTime?
+  paymentMethod                        String?
+  paymentMode                          String?
+  paymentType                          String?
+  rejectedAt                           DateTime?
+  rejectedByUserId                     String?
+  rejectionReason                      String?
+  slipDocumentId                       String?
+  slipFileUrl                          String?
+  submittedByRole                      String?
+  submittedByUserId                    String?
+  transactionReference                 String?
+  verifiedAt                           DateTime?
+  verifiedByUserId                     String?
+  Invoice                              Invoice[]
+  InvoiceRequest                       InvoiceRequest[]
+  application                          Application?     @relation(fields: [applicationId], references: [id])
+  User_Payment_rejectedByUserIdToUser  User?            @relation("Payment_rejectedByUserIdToUser", fields: [rejectedByUserId], references: [id])
+  Document                             Document?        @relation(fields: [slipDocumentId], references: [id])
+  student                              Student          @relation(fields: [studentId], references: [id])
+  User_Payment_submittedByUserIdToUser User?            @relation("Payment_submittedByUserIdToUser", fields: [submittedByUserId], references: [id])
+  tenant                               Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  User_Payment_verifiedByUserIdToUser  User?            @relation("Payment_verifiedByUserIdToUser", fields: [verifiedByUserId], references: [id])
 
   @@index([tenantId])
   @@index([studentId])
   @@index([status])
   @@index([invoiceNo])
+  @@index([applicationId])
+  @@index([paymentType])
+  @@index([submittedByUserId])
 }
 
-// ─── Status History ───────────────────────────────────────────────────────────
+model PaymentDestinationAccount {
+  id                  String                 @id @default(uuid())
+  tenantId            String
+  accountType         PaymentDestinationType
+  universityId        String?
+  label               String
+  accountHolderName   String
+  bankName            String
+  accountNumber       String
+  maskedAccountNumber String
+  currency            String                 @default("MYR")
+  branchName          String?
+  swiftBic            String?
+  iban                String?
+  routingNumber       String?
+  paymentInstructions String?
+  qrCodeDocumentId    String?
+  isDefault           Boolean                @default(false)
+  isActive            Boolean                @default(true)
+  createdByUserId     String
+  updatedByUserId     String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  archivedAt          DateTime?
+
+  @@index([tenantId, accountType, currency, isActive])
+  @@index([tenantId, universityId, currency, isActive])
+}
+
+model ApplicationPaymentAccount {
+  id            String            @id @default(uuid())
+  tenantId      String
+  studentId     String
+  applicationId String            @unique
+  status        EmgsPaymentStatus @default(NOT_CONFIGURED)
+  currency      String            @default("MYR")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([tenantId, studentId])
+  @@index([tenantId, status])
+}
+
+model EmgsFeeItem {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  studentId            String
+  applicationId        String
+  paymentAccountId     String
+  feeType              String                 @default("EMGS")
+  description          String
+  amount               Decimal                @db.Decimal(12, 2)
+  currency             String                 @default("MYR")
+  dueDate              DateTime
+  destinationType      PaymentDestinationType
+  destinationAccountId String
+  destinationSnapshot  Json
+  allowPartialPayment  Boolean                @default(false)
+  minimumPartialAmount Decimal?               @db.Decimal(12, 2)
+  status               EmgsFeeStatus          @default(PAYMENT_PENDING)
+  activeApplicationKey String?                @unique
+  studentVisibleNote   String?
+  internalNote         String?
+  legacyPaymentId      String?
+  invoiceId            String?
+  createdByUserId      String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  cancelledAt          DateTime?
+
+  @@index([tenantId, applicationId, status])
+  @@index([paymentAccountId])
+}
+
+model EmgsPaymentTransaction {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  studentId            String
+  applicationId        String
+  feeItemId            String
+  amount               Decimal                @db.Decimal(12, 2)
+  currency             String
+  paymentDate          DateTime
+  paymentMethod        String
+  paidBy               String
+  destinationType      PaymentDestinationType
+  destinationAccountId String
+  destinationSnapshot  Json
+  transactionReference String?
+  note                 String?
+  proofDocumentId      String?
+  proofFileUrl         String?
+  proofHash            String?
+  status               EmgsTransactionStatus  @default(PROOF_UPLOADED)
+  submittedByUserId    String
+  verifiedByUserId     String?
+  verifiedAt           DateTime?
+  rejectedByUserId     String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([tenantId, applicationId, status])
+  @@index([tenantId, transactionReference])
+  @@index([tenantId, proofHash])
+  @@index([feeItemId])
+}
+
+model EmgsPaymentAllocation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  transactionId String
+  feeItemId     String
+  amount        Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+
+  @@unique([transactionId, feeItemId])
+  @@index([tenantId, feeItemId])
+}
+
+model EmgsPaymentReceipt {
+  id                  String                 @id @default(uuid())
+  tenantId            String
+  studentId           String
+  applicationId       String
+  transactionId       String                 @unique
+  receiptNo           String
+  amount              Decimal                @db.Decimal(12, 2)
+  currency            String
+  destinationType     PaymentDestinationType
+  destinationSnapshot Json
+  remainingBalance    Decimal                @db.Decimal(12, 2)
+  verifiedByUserId    String
+  verifiedAt          DateTime
+  documentUrl         String?
+  createdAt           DateTime               @default(now())
+
+  @@unique([tenantId, receiptNo])
+  @@index([tenantId, applicationId])
+}
+
+model EmgsPaymentReversal {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  applicationId         String
+  transactionId         String
+  amount                Decimal  @db.Decimal(12, 2)
+  currency              String
+  reason                String
+  status                String   @default("COMPLETED")
+  createdByUserId       String
+  createdAt             DateTime @default(now())
+
+  @@index([tenantId, applicationId])
+  @@index([tenantId, transactionId])
+}
+
+model PaymentWorkflowTask {
+  id            String    @id @default(uuid())
+  tenantId      String
+  applicationId String
+  taskType      String
+  title         String
+  status        String    @default("PENDING")
+  createdById   String
+  completedById String?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([tenantId, applicationId, status])
+}
+
+model FinancialAuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  actorId    String?
+  entityType String
+  entityId   String
+  action     String
+  oldValue   Json?
+  newValue   Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, action, createdAt])
+}
 
 model StatusHistory {
   id             String             @id @default(uuid())
@@ -600,33 +771,27 @@ model StatusHistory {
   fromStatus     ApplicationStatus?
   toStatus       ApplicationStatus
   notes          String?
-  emgsPercentage Int?
   createdAt      DateTime           @default(now())
-
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  changedBy   User?       @relation(fields: [changedById], references: [id])
+  emgsPercentage Int?
+  application    Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy      User?              @relation(fields: [changedById], references: [id])
 
   @@index([applicationId])
 }
 
-// ─── Application Notes ────────────────────────────────────────────────────────
-
 model ApplicationNote {
-  id            String   @id @default(uuid())
+  id            String      @id @default(uuid())
   applicationId String
   authorId      String?
   content       String
-  isPrivate     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  author      User?       @relation(fields: [authorId], references: [id])
+  isPrivate     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author        User?       @relation(fields: [authorId], references: [id])
 
   @@index([applicationId])
 }
-
-// ─── Notifications ────────────────────────────────────────────────────────────
 
 model Notification {
   id            String           @id @default(uuid())
@@ -640,17 +805,14 @@ model Notification {
   readAt        DateTime?
   metadata      Json?
   createdAt     DateTime         @default(now())
-
-  tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application? @relation(fields: [applicationId], references: [id])
+  application   Application?     @relation(fields: [applicationId], references: [id])
+  tenant        Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tenantId])
   @@index([isRead])
 }
-
-// ─── Activity Logs ────────────────────────────────────────────────────────────
 
 model ActivityLog {
   id        String   @id @default(uuid())
@@ -664,17 +826,14 @@ model ActivityLog {
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
-
-  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@index([tenantId])
   @@index([userId])
   @@index([entity, entityId])
   @@index([createdAt])
 }
-
-// ─── AI Extraction Logs ───────────────────────────────────────────────────────
 
 model ExtractionLog {
   id            String   @id @default(uuid())
@@ -683,19 +842,16 @@ model ExtractionLog {
   provider      String   @default("tesseract")
   status        String   @default("pending")
   extractedData Json?
-  rawText       String?  @db.Text
+  rawText       String?
   confidence    Decimal? @db.Decimal(5, 2)
   errorMessage  String?
   processingMs  Int?
   createdAt     DateTime @default(now())
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user     User?    @relation(fields: [userId], references: [id])
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id])
 
   @@index([documentId])
 }
-
-// ─── Subscriptions ────────────────────────────────────────────────────────────
 
 model Subscription {
   id        String           @id @default(uuid())
@@ -709,8 +865,7 @@ model Subscription {
   notes     String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
 }
@@ -718,14 +873,12 @@ model Subscription {
 model LOE {
   id                 String      @id @default(cuid())
   applicationId      String      @unique
-  application        Application @relation(fields: [applicationId], references: [id])
   tenantId           String
   loeNumber          String      @unique
   templateName       String      @default("IIMAT_LOE")
   status             String      @default("DRAFT")
   generatedAt        DateTime?
   generatedById      String?
-  generatedBy        User?       @relation("LOEGeneratedBy", fields: [generatedById], references: [id])
   fileUrl            String?
   uploadedFileUrl    String?
   scholarshipPct     Float       @default(50)
@@ -737,19 +890,19 @@ model LOE {
   version            Int         @default(1)
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+  application        Application @relation(fields: [applicationId], references: [id])
+  generatedBy        User?       @relation("LOEGeneratedBy", fields: [generatedById], references: [id])
 }
 
-// ─── WhatsApp notification log ────────────────────────────────────────────────
-// Append-only audit of every WhatsApp template message attempt (sent or failed).
 model WhatsAppLog {
   id               String    @id @default(uuid())
   tenantId         String
   applicationId    String?
   recipientName    String?
   recipientPhone   String
-  recipientRole    String? // TENANT_ADMIN | STAFF | AGENT | STUDENT
+  recipientRole    String?
   templateName     String
-  messageStatus    String    @default("PENDING") // SENT | FAILED | SKIPPED
+  messageStatus    String    @default("PENDING")
   providerResponse Json?
   sentAt           DateTime?
   createdAt        DateTime  @default(now())
@@ -796,8 +949,9 @@ model EmailLog {
   attachmentIncluded    Boolean?
   tokenCreatedAt        DateTime?
   tokenExpiresAt        DateTime?
-  application           Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  Application           Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
+  @@unique([idempotencyKey, recipientType, recipientRecordId], name: "email_log_offer_letter_recipient_unique")
   @@index([applicationId])
   @@index([emailType])
   @@index([notificationType])
@@ -806,14 +960,13 @@ model EmailLog {
   @@index([tenantId])
   @@index([offerLetterDocumentId])
   @@index([idempotencyKey])
-  @@unique([idempotencyKey, recipientType, recipientRecordId], name: "email_log_offer_letter_recipient_unique")
 }
 
 model OfferLetterAccessToken {
-  id                     String   @id @default(uuid())
-  tokenHash              String   @unique
-  tokenVersion           Int      @default(1)
-  usedForDocumentVersion Int      @default(1)
+  id                     String    @id @default(uuid())
+  tokenHash              String    @unique
+  tokenVersion           Int       @default(1)
+  usedForDocumentVersion Int       @default(1)
   tenantId               String
   applicationId          String
   studentId              String
@@ -822,17 +975,523 @@ model OfferLetterAccessToken {
   recipientRecordId      String
   recipientEmail         String
   action                 String
-  allowDownload          Boolean  @default(false)
+  allowDownload          Boolean   @default(false)
   emailLogId             String?
   expiresAt              DateTime
   revokedAt              DateTime?
   openedAt               DateTime?
   lastAccessedAt         DateTime?
-  accessCount            Int      @default(0)
-  createdAt              DateTime @default(now())
+  accessCount            Int       @default(0)
+  createdAt              DateTime  @default(now())
 
   @@index([tenantId, documentId])
   @@index([applicationId])
   @@index([recipientType, recipientRecordId])
   @@index([expiresAt])
+}
+
+model Intake {
+  id                                  String               @id
+  tenantId                            String
+  universityId                        String
+  campusId                            String
+  campusCode                          String?
+  campusName                          String?
+  programmeId                         String
+  programmeName                       String
+  studyLevel                          String?
+  intakeMonth                         Int
+  intakeYear                          Int
+  intakeDate                          DateTime
+  applicationOpenDate                 DateTime?
+  applicationDeadline                 DateTime?
+  lateApplicationDeadline             DateTime?
+  internationalApplicationDeadline    DateTime?
+  arrivalDeadline                     DateTime?
+  intakeType                          IntakeType           @default(REGULAR)
+  status                              IntakeStatus         @default(DRAFT)
+  isActive                            Boolean              @default(true)
+  isAvailableForInternationalStudents Boolean              @default(true)
+  maximumSeats                        Int?
+  availableSeats                      Int?
+  notes                               String?
+  parentIntakeId                      String?
+  createdById                         String?
+  updatedById                         String?
+  archivedAt                          DateTime?
+  createdAt                           DateTime             @default(now())
+  updatedAt                           DateTime
+  applications                        Application[]
+  createdBy                           User?                @relation("Intake_createdByIdToUser", fields: [createdById], references: [id])
+  parentIntake                        Intake?              @relation("IntakeToIntake", fields: [parentIntakeId], references: [id])
+  childIntakes                        Intake[]             @relation("IntakeToIntake")
+  tenant                              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  university                          University           @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  updatedBy                           User?                @relation("Intake_updatedByIdToUser", fields: [updatedById], references: [id])
+  auditLogs                           IntakeAuditLog[]
+  lateApprovals                       LateIntakeApproval[]
+
+  @@unique([tenantId, universityId, campusId, programmeId, intakeMonth, intakeYear, intakeType])
+  @@index([intakeYear, intakeMonth])
+  @@index([parentIntakeId])
+  @@index([tenantId, status, isActive])
+  @@index([tenantId, universityId, campusId, programmeId])
+}
+
+model IntakeAuditLog {
+  id        String   @id
+  tenantId  String
+  intakeId  String
+  userId    String?
+  action    String
+  oldValue  Json?
+  newValue  Json?
+  createdAt DateTime @default(now())
+  intake    Intake   @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, intakeId, createdAt])
+  @@index([userId])
+}
+
+model IntakeSetting {
+  id                               String   @id
+  tenantId                         String   @unique
+  minimumInternationalLeadTimeDays Int      @default(75)
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime
+  tenant                           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Invoice {
+  id                     String                  @id
+  tenantId               String
+  applicationId          String?
+  studentId              String
+  paymentId              String
+  invoiceNo              String?                 @unique
+  invoiceType            String
+  amount                 Decimal                 @db.Decimal(12, 2)
+  currency               String                  @default("MYR")
+  subtotal               Decimal                 @db.Decimal(12, 2)
+  sstAmount              Decimal?                @db.Decimal(12, 2)
+  grandTotal             Decimal                 @db.Decimal(12, 2)
+  status                 InvoiceStatus           @default(DRAFT)
+  issueDate              DateTime                @default(now())
+  paymentDate            DateTime?
+  pdfUrl                 String?
+  pdfFilePath            String?
+  generatedByUserId      String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime
+  amendedAt              DateTime?
+  amendedById            String?
+  cancelledAt            DateTime?
+  cancelledById          String?
+  createdById            String?
+  displayInvoiceNo       String?
+  dueDate                DateTime?
+  footerNote             String?
+  intake                 String?
+  issuedAt               DateTime?
+  issuedById             String?
+  notes                  String?
+  originalInvoiceId      String?
+  passportNo             String?
+  paymentType            String?
+  programmeName          String?
+  referenceNo            String?
+  revisionNo             Int                     @default(0)
+  sstRate                Decimal?                @db.Decimal(5, 2)
+  studentEmail           String?
+  studentName            String?
+  studentPhone           String?
+  tenantAddress          String?
+  tenantEmail            String?
+  tenantName             String?
+  tenantPhone            String?
+  tenantShortCode        String?
+  universityName         String?
+  updatedById            String?
+  watermarkStatus        String?
+  paymentAccountSnapshot Json?
+  paymentDestinationType PaymentDestinationType?
+  destinationAccountId   String?
+  emgsFeeItemId          String?
+  Application            Application?            @relation(fields: [applicationId], references: [id])
+  User                   User?                   @relation(fields: [generatedByUserId], references: [id])
+  Invoice                Invoice?                @relation("InvoiceToInvoice", fields: [originalInvoiceId], references: [id])
+  other_Invoice          Invoice[]               @relation("InvoiceToInvoice")
+  Payment                Payment                 @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  Student                Student                 @relation(fields: [studentId], references: [id])
+  Tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  InvoiceItem            InvoiceItem[]
+
+  @@index([applicationId])
+  @@index([invoiceNo])
+  @@index([invoiceType])
+  @@index([originalInvoiceId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([studentId])
+  @@index([tenantId])
+}
+
+model InvoiceAuditLog {
+  id         String   @id
+  tenantId   String
+  userId     String?
+  entityType String
+  entityId   String
+  action     String
+  oldValue   Json?
+  newValue   Json?
+  createdAt  DateTime @default(now())
+  Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([tenantId])
+}
+
+model InvoiceItem {
+  id          String   @id
+  invoiceId   String
+  description String
+  quantity    Decimal  @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  amount      Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model InvoiceRequest {
+  id              String               @id
+  tenantId        String
+  applicationId   String
+  paymentId       String
+  requestedBy     String?
+  requestStatus   InvoiceRequestStatus @default(REQUESTED)
+  note            String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime
+  studentId       String?
+  Application     Application          @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  Payment         Payment              @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  Student         Student?             @relation(fields: [studentId], references: [id])
+  Tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([paymentId])
+  @@index([requestStatus])
+  @@index([tenantId])
+}
+
+model InvoiceSequence {
+  id           String   @id
+  tenantId     String
+  year         Int
+  lastSequence Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  Tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year])
+  @@index([tenantId])
+}
+
+model LateIntakeApproval {
+  id                            String                   @id
+  tenantId                      String
+  intakeId                      String
+  applicationId                 String?
+  requestedById                 String
+  reviewedById                  String?
+  status                        LateIntakeApprovalStatus @default(PENDING)
+  internalReason                String
+  universityAcceptanceConfirmed Boolean
+  visaRiskExplained             Boolean
+  reviewNotes                   String?
+  reviewedAt                    DateTime?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime
+  application                   Application?             @relation(fields: [applicationId], references: [id])
+  intake                        Intake                   @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+  requestedBy                   User                     @relation("LateIntakeApproval_requestedByIdToUser", fields: [requestedById], references: [id])
+  reviewedBy                    User?                    @relation("LateIntakeApproval_reviewedByIdToUser", fields: [reviewedById], references: [id])
+  tenant                        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([intakeId])
+  @@index([tenantId, status])
+}
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  STAFF
+  REGISTERED_AGENT
+}
+
+enum AgentType {
+  REGISTERED_AGENT
+  MANAGED_AGENT
+  REFERRAL_PARTNER
+}
+
+enum AgentStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum StudentSourceType {
+  DIRECT_STUDENT
+  REGISTERED_AGENT
+  MANAGED_AGENT
+  REFERRAL_PARTNER
+}
+
+enum AgentCommissionType {
+  UPFRONT
+  CLAIMABLE
+}
+
+enum AgentCommissionStatus {
+  NOT_ELIGIBLE
+  PENDING
+  ELIGIBLE
+  CLAIM_SUBMITTED
+  APPROVED
+  SCHEDULED
+  PAID
+  REJECTED
+  CANCELLED
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  CANCELLED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  LOE_PROCESSING
+  LOE_APPROVED
+  PAYMENT_PENDING
+  EMGS_SUBMITTED
+  EMGS_APPROVED
+  EVAL_APPROVED
+  VISA_APPROVED
+  AIRPORT_CLEARANCE
+  COMPLETED
+  REJECTED
+  ACCEPTED
+  AWAITING_VERIFICATION
+  SENT_TO_UNIVERSITY
+  AWAITING_OFFER_LETTER
+  OFFER_LETTER_ISSUED
+  EMGS_PROCESSING
+}
+
+enum DocumentType {
+  PASSPORT
+  SSC_CERTIFICATE
+  HSC_CERTIFICATE
+  DIPLOMA
+  BACHELOR_DEGREE
+  MASTERS_DEGREE
+  TRANSCRIPT
+  BANK_STATEMENT
+  IELTS_CERTIFICATE
+  PTE_CERTIFICATE
+  MOI_CERTIFICATE
+  PHOTO
+  OFFER_LETTER
+  EMGS_DOCUMENT
+  EVAL_DOCUMENT
+  VISA_DOCUMENT
+  MEDICAL_CERTIFICATE
+  ADDITIONAL
+  PASSPORT_FULL_SCAN
+  ACADEMIC_DOCUMENTS
+  ENGLISH_PROFICIENCY
+  FLIGHT_TICKET
+  PAYMENT_PROOF
+  TUITION_PROOF
+  INVOICE
+  TUITION_INVOICE
+  MDAC_CONFIRMATION
+}
+
+enum DocumentStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+  VERIFIED
+  REJECTED
+  PAYMENT_PROOF_UPLOADED
+  INVOICE_REQUESTED
+  PAYMENT_PENDING_VERIFICATION
+  PAYMENT_VERIFIED
+  INVOICE_DRAFT
+  INVOICE_ISSUED
+  PAYMENT_DUE
+  PAYMENT_PAID
+  PAYMENT_UNPAID
+  PAYMENT_REJECTED
+  INVOICE_CANCELLED
+  INVOICE_AMENDED
+}
+
+enum PaymentDestinationType {
+  TENANT_ACCOUNT
+  UNIVERSITY_ACCOUNT
+  EMGS_ACCOUNT
+  OTHER_APPROVED_ACCOUNT
+}
+
+enum EmgsPaymentStatus {
+  NOT_CONFIGURED
+  PAYMENT_PENDING
+  PROOF_UPLOADED
+  UNDER_VERIFICATION
+  PARTIALLY_PAID
+  FULLY_PAID
+  OVERPAID
+  REJECTED
+  REFUNDED
+  CANCELLED
+  NOT_REQUIRED
+}
+
+enum EmgsFeeStatus {
+  PAYMENT_PENDING
+  PARTIALLY_PAID
+  FULLY_PAID
+  OVERPAID
+  CANCELLED
+  NOT_REQUIRED
+}
+
+enum EmgsTransactionStatus {
+  PROOF_UPLOADED
+  UNDER_VERIFICATION
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+enum NotificationType {
+  STATUS_CHANGED
+  DOCUMENT_MISSING
+  PAYMENT_PENDING
+  ASSIGNMENT
+  APPROVAL
+  REJECTION
+  SYSTEM
+}
+
+enum SubscriptionPlan {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum EnglishProficiency {
+  IELTS
+  PTE
+  MOI
+  NONE
+}
+
+enum IntakeStatus {
+  DRAFT
+  UPCOMING
+  OPEN
+  CLOSING_SOON
+  CLOSED
+  FULL
+  COMPLETED
+  CANCELLED
+}
+
+enum IntakeType {
+  REGULAR
+  LATE_INTAKE
+  LATE_REGISTRATION
+  LATE_ARRIVAL
+  SPECIAL_INTAKE
+  MONTHLY
+  RESEARCH
+  ENGLISH
+  SHORT_COURSE
+}
+
+enum InvoiceRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  PAID
+  CANCELLED
+  DRAFT
+  ISSUED
+  UNPAID
+  DUE
+  AMENDED
+}
+
+enum LateIntakeApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MdacStatus {
+  NOT_REQUIRED
+  REQUIRED
+  SUBMITTED
+  VERIFIED
+  NEEDS_REVIEW
 }

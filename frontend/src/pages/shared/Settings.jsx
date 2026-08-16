@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Loader2, Save, User, Lock, Bell, MessageCircle } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { Loader2, Save, User, Lock, Bell, MessageCircle, Building2, Upload } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { authAPI } from '../../api/endpoints';
+import { authAPI, tenantAPI } from '../../api/endpoints';
 import { useAuthStore } from '../../store/authStore';
 import PageHeader from '../../components/common/PageHeader';
 import { Button } from '../../components/ui/button';
@@ -25,6 +25,10 @@ export default function Settings() {
   const { user, updateUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState('profile');
   const [saving, setSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [agentCanViewFullName, setAgentCanViewFullName] = useState(false);
+  const logoInputRef = useRef(null);
 
   const {
     register: regProfile,
@@ -48,6 +52,12 @@ export default function Settings() {
       resetProfile({ firstName: user.firstName, lastName: user.lastName, email: user.email });
     }
   }, [user, resetProfile]);
+
+  useEffect(() => () => {
+    if (logoPreview) URL.revokeObjectURL(logoPreview);
+  }, [logoPreview]);
+
+  useEffect(() => { if (user?.role === 'TENANT_ADMIN') tenantAPI.me().then((r) => setAgentCanViewFullName(Boolean(r.data.data?.settings?.agentCanViewStudentFullName))).catch(() => {}); }, [user?.role]);
 
   const onSaveProfile = async (data) => {
     setSaving(true);
@@ -75,9 +85,38 @@ export default function Settings() {
     }
   };
 
+  const onPickLogo = (file) => {
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const onUploadLogo = async () => {
+    if (!logoFile) {
+      toast.error('Choose a logo first');
+      return;
+    }
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+      const res = await tenantAPI.uploadMyLogo(formData);
+      const tenant = res.data.data;
+      updateUser({ tenant: { ...user.tenant, ...tenant } });
+      setLogoFile(null);
+      setLogoPreview(null);
+      toast.success('Company logo updated');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update company logo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
+    ...(isTenantAdmin ? [{ id: 'company', label: 'Company', icon: Building2 }] : []),
     { id: 'password', label: 'Password', icon: Lock },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     ...(isTenantAdmin ? [{ id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle }] : []),
@@ -105,6 +144,58 @@ export default function Settings() {
       <div className={activeTab === 'whatsapp' ? 'max-w-3xl' : 'max-w-xl'}>
         {/* WhatsApp Tab (tenant admin) */}
         {activeTab === 'whatsapp' && isTenantAdmin && <WhatsAppSettings />}
+
+        {/* Company Tab (tenant admin) */}
+        {activeTab === 'company' && isTenantAdmin && (
+          <Card>
+            <CardHeader><CardTitle>Company Branding</CardTitle></CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center gap-4">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
+                  {logoPreview || user?.tenant?.logo ? (
+                    <img
+                      src={logoPreview || user.tenant.logo}
+                      alt={user?.tenant?.name || 'Company logo'}
+                      className="h-full w-full bg-white object-contain p-1"
+                    />
+                  ) : (
+                    <Building2 className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium">{user?.tenant?.name}</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, WEBP, or SVG up to 10 MB.</p>
+                  {logoFile && <p className="mt-1 truncate text-xs text-muted-foreground">{logoFile.name}</p>}
+                </div>
+              </div>
+
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                className="hidden"
+                onChange={(e) => onPickLogo(e.target.files?.[0])}
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                  <Upload className="h-4 w-4" />
+                  {logoFile ? 'Change Logo' : 'Choose Logo'}
+                </Button>
+                <Button type="button" size="sm" disabled={saving || !logoFile} onClick={onUploadLogo}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {saving ? 'Uploading...' : 'Save Logo'}
+                </Button>
+              </div>
+              <div className="rounded-lg border border-border p-4">
+                <label className="flex items-start justify-between gap-4">
+                  <span><span className="block text-sm font-medium">Agent can view full Student name</span><span className="text-xs text-muted-foreground">Off by default. Private contact and application information remains hidden.</span></span>
+                  <input type="checkbox" checked={agentCanViewFullName} onChange={async (e) => { const value = e.target.checked; setAgentCanViewFullName(value); try { await tenantAPI.updateAgentPrivacy(value); toast.success('Agent privacy updated'); } catch { setAgentCanViewFullName(!value); toast.error('Failed to update agent privacy'); } }} className="h-4 w-4 accent-primary" />
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (

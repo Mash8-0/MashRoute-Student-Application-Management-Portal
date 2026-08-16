@@ -9,7 +9,7 @@ const { tenantContext } = require('../../middleware/tenant.middleware');
 
 const upload = multer({ dest: 'uploads/temp', limits: { fileSize: 5 * 1024 * 1024 } });
 
-router.use(authenticate, tenantContext);
+router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 router.get('/stats', asyncHandler(async (req, res) => {
   const stats = await paymentService.getPaymentStats(req.tenantId);

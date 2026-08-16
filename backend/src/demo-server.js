@@ -36,9 +36,9 @@ const USERS = {
 };
 
 const PASSWORDS = {
-  'admin@demo-agency.com': 'Admin@123!',
-  'superadmin@mashroute.com': 'SuperAdmin@123!',
-  'staff@demo-agency.com': 'Staff@123!',
+  'admin@demo-agency.com': process.env.DEMO_ADMIN_PASSWORD,
+  'superadmin@mashroute.com': process.env.DEMO_SUPER_ADMIN_PASSWORD,
+  'staff@demo-agency.com': process.env.DEMO_STAFF_PASSWORD,
 };
 
 const ok = (res, data, message = 'Success') => res.json({ success: true, message, data });
@@ -350,7 +350,5 @@ app.listen(PORT, () => {
   console.log(`\n🚀 MashRoute Demo Server running on :${PORT}`);
   console.log(`   Mode: DEMO (in-memory data, no database required)\n`);
   console.log(`   Login credentials:`);
-  console.log(`   Tenant Admin : admin@demo-agency.com / Admin@123!`);
-  console.log(`   Super Admin  : superadmin@mashroute.com / SuperAdmin@123!`);
-  console.log(`   Staff        : staff@demo-agency.com / Staff@123!\n`);
+  console.log('   Demo passwords are read from DEMO_ADMIN_PASSWORD, DEMO_SUPER_ADMIN_PASSWORD, and DEMO_STAFF_PASSWORD.\n');
 });

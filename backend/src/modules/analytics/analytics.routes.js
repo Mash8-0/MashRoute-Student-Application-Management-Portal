@@ -5,24 +5,14 @@ const ApiResponse = require('../../utils/apiResponse');
 const asyncHandler = require('../../utils/asyncHandler');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 const { tenantContext } = require('../../middleware/tenant.middleware');
-const mdacService = require('../mdac/mdac.service');
 
-router.use(authenticate, tenantContext);
-
-const PAID_PAYMENT_STATUSES = ['PAID', 'VERIFIED', 'PAYMENT_VERIFIED', 'PAYMENT_PAID', 'INVOICE_ISSUED'];
+router.use(authenticate, tenantContext, authorize('SUPER_ADMIN', 'TENANT_ADMIN', 'STAFF'));
 
 // Tenant dashboard analytics
 router.get('/dashboard', asyncHandler(async (req, res) => {
   const tenantId = req.tenantId;
   // SUPER_ADMIN has tenantId null → omit tenant filter to aggregate across all tenants
   const t = tenantId ? { tenantId } : {};
-  const assignedScope = req.user.role === 'STAFF' ? { agentId: req.user.id } : {};
-  const applicationScope = { ...t, ...assignedScope, deletedAt: null };
-  const paymentScope = {
-    ...t,
-    status: { in: PAID_PAYMENT_STATUSES },
-    ...(req.user.role === 'STAFF' && { application: { agentId: req.user.id, deletedAt: null } }),
-  };
 
   const [
     totalStudents,
@@ -32,23 +22,16 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     paymentStats,
     agentPerformance,
     monthlyApplications,
-    mdacActionRequired,
   ] = await Promise.all([
-    prisma.student.count({
-      where: {
-        ...t,
-        deletedAt: null,
-        ...(req.user.role === 'STAFF' && { applications: { some: { agentId: req.user.id, deletedAt: null } } }),
-      },
-    }),
-    prisma.application.count({ where: applicationScope }),
+    prisma.student.count({ where: { ...t, deletedAt: null } }),
+    prisma.application.count({ where: { ...t, deletedAt: null } }),
     prisma.application.groupBy({
       by: ['status'],
-      where: applicationScope,
+      where: { ...t, deletedAt: null },
       _count: { status: true },
     }),
     prisma.application.findMany({
-      where: applicationScope,
+      where: { ...t, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 5,
       include: {
@@ -57,36 +40,21 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
       },
     }),
     prisma.payment.aggregate({
-      where: paymentScope,
+      where: { ...t, status: 'PAID' },
       _sum: { amount: true },
       _count: { id: true },
     }),
-    req.user.role === 'STAFF'
-      ? Promise.resolve([])
-      : prisma.user.findMany({
-          where: { ...t, role: 'STAFF', deletedAt: null },
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            _count: { select: { assignedApplications: true } },
-          },
-        }),
+    prisma.user.findMany({
+      where: { ...t, role: 'STAFF', deletedAt: null },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        _count: { select: { assignedApplications: true } },
+      },
+    }),
     // Last 6 months application volume (tenant-scoped when applicable)
-    req.user.role === 'STAFF'
-      ? prisma.$queryRaw`
-          SELECT
-            TO_CHAR(DATE_TRUNC('month', "createdAt"), 'Mon YYYY') as month,
-            CAST(COUNT(*) AS INTEGER) as count
-          FROM "Application"
-          WHERE "tenantId" = ${tenantId}
-            AND "agentId" = ${req.user.id}
-            AND "deletedAt" IS NULL
-            AND "createdAt" >= NOW() - INTERVAL '6 months'
-          GROUP BY DATE_TRUNC('month', "createdAt")
-          ORDER BY DATE_TRUNC('month', "createdAt")
-        `
-      : tenantId
+    tenantId
       ? prisma.$queryRaw`
           SELECT
             TO_CHAR(DATE_TRUNC('month', "createdAt"), 'Mon YYYY') as month,
@@ -108,7 +76,6 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
           GROUP BY DATE_TRUNC('month', "createdAt")
           ORDER BY DATE_TRUNC('month', "createdAt")
         `,
-    mdacService.dashboardCounts(tenantId, req.user),
   ]);
 
   const statusMap = applicationsByStatus.reduce((acc, item) => {
@@ -131,7 +98,6 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     recentApplications,
     agentPerformance,
     monthlyApplications,
-    mdacActionRequired,
   });
 }));
 

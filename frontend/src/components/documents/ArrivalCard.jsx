@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PlaneLanding, Calendar, Upload, Loader2, Eye, Download, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { PlaneLanding, Calendar, Upload, Loader2, Eye, Download } from 'lucide-react';
 import { Button, Input } from '../ui';
 import { applicationAPI } from '../../api/endpoints';
 import { toast } from '../ui/toast';
@@ -28,7 +28,7 @@ function formatArrivalDate(dateStr) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ArrivalCard({ application, canEdit, userRole, onRefresh }) {
+export default function ArrivalCard({ application, canEdit, onRefresh }) {
   const initialDate = application?.arrivalDate
     ? new Date(application.arrivalDate).toISOString().slice(0, 10)
     : '';
@@ -39,40 +39,12 @@ export default function ArrivalCard({ application, canEdit, userRole, onRefresh 
 
   const [arrivalDate, setArrivalDate] = useState(initialDate);
   const [flightDate, setFlightDate] = useState(initialFlightDate);
-  const [flightNumber, setFlightNumber] = useState(application?.flightNumber || '');
-  const [airline, setAirline] = useState(application?.airline || '');
-  const [lastPortOfEmbarkation, setLastPortOfEmbarkation] = useState(application?.lastPortOfEmbarkation || '');
-  const [modeOfTravel, setModeOfTravel] = useState(application?.modeOfTravel || 'AIR');
-  const [accommodationName, setAccommodationName] = useState(application?.malaysiaAccommodationName || '');
-  const [accommodationAddress, setAccommodationAddress] = useState(application?.malaysiaAccommodationAddress || '');
-  const [accommodationState, setAccommodationState] = useState(application?.malaysiaAccommodationState || '');
-  const [accommodationCity, setAccommodationCity] = useState(application?.malaysiaAccommodationCity || '');
-  const [accommodationPostcode, setAccommodationPostcode] = useState(application?.malaysiaAccommodationPostcode || '');
   const [file, setFile] = useState(null);
-  const [mdacFile, setMdacFile] = useState(null);
-  const [mdacNotes, setMdacNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [mdacBusy, setMdacBusy] = useState(false);
 
   const hasArrivalDate = Boolean(application?.arrivalDate);
   const hasFlightDate = Boolean(application?.flightDate);
   const hasTicket = Boolean(application?.flightTicketUrl);
-  const mdac = application?.mdac;
-  const eligibility = mdac?.eligibility || {};
-  const isAdmin = ['TENANT_ADMIN', 'SUPER_ADMIN'].includes(userRole);
-
-  const mdacTone = {
-    NOT_REQUIRED: 'bg-muted text-muted-foreground border-border',
-    NOT_YET_ELIGIBLE: 'bg-muted text-muted-foreground border-border',
-    ELIGIBLE_NOW: 'bg-blue-500/10 text-blue-700 border-blue-200',
-    DUE_TOMORROW: 'bg-amber-500/10 text-amber-700 border-amber-200',
-    DUE_TODAY: 'bg-red-500/10 text-red-700 border-red-200',
-    OVERDUE: 'bg-red-500/10 text-red-700 border-red-200',
-    SUBMITTED: 'bg-purple-500/10 text-purple-700 border-purple-200',
-    VERIFIED: 'bg-emerald-500/10 text-emerald-700 border-emerald-200',
-    NEEDS_REVIEW: 'bg-orange-500/10 text-orange-700 border-orange-200',
-    ARRIVAL_DATE_CHANGED: 'bg-orange-500/10 text-orange-700 border-orange-200',
-  }[eligibility.displayState] || 'bg-muted text-muted-foreground border-border';
 
   const handleSave = async () => {
     if (!arrivalDate && !flightDate && !file) {
@@ -85,15 +57,6 @@ export default function ArrivalCard({ application, canEdit, userRole, onRefresh 
       if (file) form.append('file', file);
       if (arrivalDate) form.append('arrivalDate', arrivalDate);
       if (flightDate) form.append('flightDate', flightDate);
-      form.append('flightNumber', flightNumber);
-      form.append('airline', airline);
-      form.append('lastPortOfEmbarkation', lastPortOfEmbarkation);
-      form.append('modeOfTravel', modeOfTravel);
-      form.append('accommodationName', accommodationName);
-      form.append('accommodationAddress', accommodationAddress);
-      form.append('accommodationState', accommodationState);
-      form.append('accommodationCity', accommodationCity);
-      form.append('accommodationPostcode', accommodationPostcode);
       await applicationAPI.updateArrival(application.id, form);
       toast.success('Arrival details saved successfully');
       setFile(null);
@@ -110,45 +73,6 @@ export default function ArrivalCard({ application, canEdit, userRole, onRefresh 
   const openTicket = () => {
     const url = getPreviewUrl(application.flightTicketUrl);
     if (url) window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const uploadMdac = async () => {
-    if (!mdacFile) {
-      toast.error('Upload the MDAC confirmation proof first.');
-      return;
-    }
-    setMdacBusy(true);
-    try {
-      const form = new FormData();
-      form.append('file', mdacFile);
-      if (mdacNotes) form.append('notes', mdacNotes);
-      await applicationAPI.uploadMdacProof(application.id, form);
-      toast.success('MDAC proof uploaded');
-      setMdacFile(null);
-      setMdacNotes('');
-      onRefresh?.();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to upload MDAC proof');
-    } finally {
-      setMdacBusy(false);
-    }
-  };
-
-  const mdacAction = async (action) => {
-    setMdacBusy(true);
-    try {
-      if (action === 'submitted') await applicationAPI.markMdacSubmitted(application.id, mdacNotes);
-      if (action === 'not_required') await applicationAPI.markMdacNotRequired(application.id, mdacNotes);
-      if (action === 'verify') await applicationAPI.verifyMdac(application.id, { action: 'verify', notes: mdacNotes });
-      if (action === 'review') await applicationAPI.verifyMdac(application.id, { action: 'review', notes: mdacNotes });
-      toast.success('MDAC status updated');
-      setMdacNotes('');
-      onRefresh?.();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update MDAC');
-    } finally {
-      setMdacBusy(false);
-    }
   };
 
   return (
@@ -272,31 +196,6 @@ export default function ArrivalCard({ application, canEdit, userRole, onRefresh 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input value={flightNumber} onChange={(e) => setFlightNumber(e.target.value)} placeholder="Flight number" disabled={saving} aria-label="Flight number" />
-            <Input value={airline} onChange={(e) => setAirline(e.target.value)} placeholder="Airline" disabled={saving} aria-label="Airline" />
-            <Input value={lastPortOfEmbarkation} onChange={(e) => setLastPortOfEmbarkation(e.target.value)} placeholder="Last port of embarkation" disabled={saving} aria-label="Last port of embarkation" />
-            <select
-              value={modeOfTravel}
-              onChange={(e) => setModeOfTravel(e.target.value)}
-              disabled={saving}
-              aria-label="Mode of travel"
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="AIR">Air</option>
-              <option value="LAND">Land</option>
-              <option value="SEA">Sea</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input value={accommodationName} onChange={(e) => setAccommodationName(e.target.value)} placeholder="Accommodation name/type" disabled={saving} aria-label="Accommodation name or type" />
-            <Input value={accommodationAddress} onChange={(e) => setAccommodationAddress(e.target.value)} placeholder="Accommodation address" disabled={saving} aria-label="Accommodation address" />
-            <Input value={accommodationState} onChange={(e) => setAccommodationState(e.target.value)} placeholder="State" disabled={saving} aria-label="Accommodation state" />
-            <Input value={accommodationCity} onChange={(e) => setAccommodationCity(e.target.value)} placeholder="City" disabled={saving} aria-label="Accommodation city" />
-            <Input value={accommodationPostcode} onChange={(e) => setAccommodationPostcode(e.target.value)} placeholder="Postcode" disabled={saving} aria-label="Accommodation postcode" />
-          </div>
-
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground" htmlFor="flight-ticket">
               Flight Ticket
@@ -324,94 +223,6 @@ export default function ArrivalCard({ application, canEdit, userRole, onRefresh 
               {saving ? 'Saving...' : 'Save Arrival Details'}
             </Button>
           </div>
-        </div>
-      )}
-
-      {mdac && (
-        <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h4 className="text-sm font-bold text-foreground">MDAC Reminder & Tracking</h4>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Window opens {eligibility.windowStartDate || 'after arrival is set'} · deadline {eligibility.deadlineDate || '—'}
-              </p>
-            </div>
-            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${mdacTone}`}>
-              {(eligibility.displayState || mdac.status || 'REQUIRED').replace(/_/g, ' ')}
-            </span>
-          </div>
-
-          {(eligibility.displayState === 'ARRIVAL_DATE_CHANGED' || eligibility.displayState === 'NEEDS_REVIEW') && (
-            <div className="flex gap-2 rounded-lg border border-orange-200 bg-orange-500/10 p-3 text-sm text-orange-800">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              <p>The Malaysia arrival date changed after MDAC activity. Review the proof or submit MDAC again if needed.</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <p><span className="text-muted-foreground">Malaysia arrival:</span> {eligibility.arrivalDate || 'Not set'}</p>
-            <p><span className="text-muted-foreground">Timezone:</span> {eligibility.timezone || 'Asia/Kuala_Lumpur'}</p>
-            <p><span className="text-muted-foreground">Flight:</span> {application.flightNumber || '—'} {application.airline ? `· ${application.airline}` : ''}</p>
-            <p><span className="text-muted-foreground">Last port:</span> {application.lastPortOfEmbarkation || '—'}</p>
-            <p className="sm:col-span-2"><span className="text-muted-foreground">Accommodation:</span> {[application.malaysiaAccommodationName, application.malaysiaAccommodationAddress, application.malaysiaAccommodationCity, application.malaysiaAccommodationState, application.malaysiaAccommodationPostcode].filter(Boolean).join(', ') || '—'}</p>
-            <p><span className="text-muted-foreground">Submitted:</span> {mdac.submittedAt ? formatArrivalDate(mdac.submittedAt) : '—'}</p>
-            <p><span className="text-muted-foreground">Verified:</span> {mdac.verifiedAt ? formatArrivalDate(mdac.verifiedAt) : '—'}</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <a href={eligibility.officialUrl} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm">
-                <ExternalLink className="h-4 w-4" /> Official MDAC
-              </Button>
-            </a>
-            {mdac.proofUrl && (
-              <a href={mdac.proofUrl} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4" /> View Proof
-                </Button>
-              </a>
-            )}
-          </div>
-
-          {canEdit && (
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <Input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => setMdacFile(e.target.files?.[0] || null)}
-                disabled={mdacBusy}
-                aria-label="MDAC confirmation proof"
-              />
-              <textarea
-                value={mdacNotes}
-                onChange={(e) => setMdacNotes(e.target.value)}
-                placeholder="Review notes"
-                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                disabled={mdacBusy}
-              />
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={uploadMdac} disabled={mdacBusy || !mdacFile}>
-                  <Upload className="h-4 w-4" /> Upload Proof
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => mdacAction('submitted')} disabled={mdacBusy}>
-                  Mark Submitted
-                </Button>
-                {isAdmin && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => mdacAction('not_required')} disabled={mdacBusy}>
-                      Not Required
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => mdacAction('review')} disabled={mdacBusy}>
-                      Needs Review
-                    </Button>
-                    <Button size="sm" onClick={() => mdacAction('verify')} disabled={mdacBusy}>
-                      <ShieldCheck className="h-4 w-4" /> Verify
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

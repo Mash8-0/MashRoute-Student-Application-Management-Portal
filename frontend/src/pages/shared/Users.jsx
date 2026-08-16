@@ -92,7 +92,8 @@ function UserModal({ user: editUser, onClose, onSaved }) {
           <div>
             <label className="mb-1.5 block text-xs font-medium">Role *</label>
             <select className={inputClass} value={form.role} onChange={(e) => set('role', e.target.value)}>
-              <option value="STAFF">Staff</option>
+            <option value="STAFF">Staff</option>
+            <option value="REGISTERED_AGENT">Registered Agent</option>
               <option value="TENANT_ADMIN">Tenant Admin</option>
             </select>
           </div>

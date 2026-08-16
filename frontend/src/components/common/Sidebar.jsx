@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, GraduationCap, FileText, CreditCard,
   Building2, Settings, LogOut, ChevronLeft, ChevronRight,
-  BarChart3, BookOpen, Globe, Activity, ClipboardCheck, Wallet,
+  BarChart3, Bell, BookOpen, Globe, Activity, ClipboardCheck, Wallet, ArchiveRestore, CalendarDays,
 } from 'lucide-react';
 import { cn, getInitials } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
@@ -19,6 +19,7 @@ const navConfig = {
     { label: 'Universities', icon: Globe, path: '/super-admin/universities' },
     { label: 'Analytics', icon: BarChart3, path: '/super-admin/analytics' },
     { label: 'Activity Log', icon: Activity, path: '/super-admin/activity' },
+    { label: 'Restore', icon: ArchiveRestore, path: '/restore' },
     { label: 'Settings', icon: Settings, path: '/settings' },
   ],
   TENANT_ADMIN: [
@@ -28,9 +29,12 @@ const navConfig = {
     { label: 'Documents', icon: BookOpen, path: '/documents' },
     { label: 'Payments', icon: CreditCard, path: '/payments' },
     { label: 'Commission', icon: Wallet, path: '/commission' },
+    { label: 'Agents', icon: Users, path: '/agents' },
     { label: 'Staff', icon: Users, path: '/users' },
     { label: 'Universities', icon: Globe, path: '/universities' },
+    { label: 'Intakes', icon: CalendarDays, path: '/intakes' },
     { label: 'Analytics', icon: BarChart3, path: '/analytics' },
+    { label: 'Restore', icon: ArchiveRestore, path: '/restore' },
     { label: 'Settings', icon: Settings, path: '/settings' },
   ],
   STAFF: [
@@ -39,13 +43,18 @@ const navConfig = {
     { label: 'Applications', icon: FileText, path: '/applications' },
     { label: 'Payments', icon: CreditCard, path: '/payments' },
     { label: 'Commission', icon: Wallet, path: '/commission' },
+    { label: 'Agents', icon: Users, path: '/agents' },
     { label: 'Settings', icon: Settings, path: '/settings' },
+  ],
+  REGISTERED_AGENT: [
+    { label: 'My Commissions', icon: Wallet, path: '/agent/commissions' },
+    { label: 'My Profile', icon: Settings, path: '/settings' },
   ],
 };
 
-export default function Sidebar({ mobile = false }) {
+export default function Sidebar() {
   const { user, logout } = useAuthStore();
-  const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+  const { sidebarOpen, toggleSidebar } = useUIStore();
   const navigate = useNavigate();
 
   const navItems = navConfig[user?.role] || navConfig.STAFF;
@@ -56,21 +65,17 @@ export default function Sidebar({ mobile = false }) {
     navigate('/login');
   };
 
-  const handleNavClick = () => {
-    if (mobile) setSidebarOpen(false);
-  };
-
   return (
-    <div className="relative z-10 h-full flex-shrink-0">
+    <div className="relative h-full flex-shrink-0">
     <motion.aside
-      animate={{ width: mobile || sidebarOpen ? 240 : 72 }}
+      animate={{ width: sidebarOpen ? 240 : 72 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
       className="relative flex h-full flex-col border-r border-border bg-card overflow-hidden"
     >
       {/* Logo */}
       <div className="flex h-20 items-center justify-center border-b border-border px-4">
         <AnimatePresence initial={false} mode="wait">
-          {mobile || sidebarOpen ? (
+          {sidebarOpen ? (
             <motion.div
               key="logo-full"
               initial={{ opacity: 0 }}
@@ -127,7 +132,7 @@ export default function Sidebar({ mobile = false }) {
 
       {/* Company brand (tenant) */}
       <AnimatePresence initial={false}>
-        {(mobile || sidebarOpen) && user?.tenant?.name && (
+        {sidebarOpen && user?.tenant?.name && (
           <motion.div
             key="company-brand"
             initial={{ opacity: 0, height: 0 }}
@@ -136,7 +141,7 @@ export default function Sidebar({ mobile = false }) {
             transition={{ duration: 0.15 }}
             className="overflow-hidden border-b border-border"
           >
-            <div className="px-3 py-2.5">
+            <div className="px-3 py-3">
               <CompanyBrand
                 name={user.tenant.name}
                 logo={user.tenant.logo}
@@ -154,7 +159,6 @@ export default function Sidebar({ mobile = false }) {
             key={item.path}
             to={item.path}
             end={item.path === '/dashboard' || item.path === '/super-admin'}
-            onClick={handleNavClick}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
@@ -165,7 +169,7 @@ export default function Sidebar({ mobile = false }) {
           >
             <item.icon className="h-4 w-4 flex-shrink-0" />
             <AnimatePresence>
-              {(mobile || sidebarOpen) && (
+              {sidebarOpen && (
                 <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -188,7 +192,7 @@ export default function Sidebar({ mobile = false }) {
         >
           <LogOut className="h-4 w-4 flex-shrink-0" />
           <AnimatePresence>
-            {(mobile || sidebarOpen) && (
+            {sidebarOpen && (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 Sign Out
               </motion.span>
@@ -202,7 +206,7 @@ export default function Sidebar({ mobile = false }) {
             {getInitials(`${user?.firstName} ${user?.lastName}`)}
           </div>
           <AnimatePresence>
-            {(mobile || sidebarOpen) && (
+            {sidebarOpen && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -224,7 +228,6 @@ export default function Sidebar({ mobile = false }) {
       {/* Toggle button — sibling of the aside so it isn't clipped by overflow-hidden.
           Centered on the right border (-translate-x-1/2) and vertically centered
           within the logo header so it never overlaps the company-brand row. */}
-      {!mobile && (
       <button
         onClick={toggleSidebar}
         aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -236,7 +239,6 @@ export default function Sidebar({ mobile = false }) {
           <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
         )}
       </button>
-      )}
     </div>
   );
 }

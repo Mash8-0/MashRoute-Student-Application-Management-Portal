@@ -1,5 +1,4 @@
 const applicationService = require('./application.service');
-const mdacService = require('../mdac/mdac.service');
 const ApiResponse = require('../../utils/apiResponse');
 const asyncHandler = require('../../utils/asyncHandler');
 
@@ -19,8 +18,8 @@ const listApplications = asyncHandler(async (req, res) => {
   return ApiResponse.paginated(res, result.applications, result.pagination);
 });
 
-const listMdacRecords = asyncHandler(async (req, res) => {
-  const result = await mdacService.listActionRequired(req.tenantId, req.query, req.user);
+const listDeletedApplications = asyncHandler(async (req, res) => {
+  const result = await applicationService.listDeletedApplications(req.tenantId, req.query);
   return ApiResponse.paginated(res, result.applications, result.pagination);
 });
 
@@ -108,36 +107,11 @@ const updatePostEvalStatus = asyncHandler(async (req, res) => {
 });
 
 const updateArrival = asyncHandler(async (req, res) => {
-  const application = await mdacService.updateArrivalInfo(
-    req.params.id, req.tenantId, req.user, req.body, req.file
+  const { arrivalDate, flightDate } = req.body;
+  const application = await applicationService.updateArrival(
+    req.params.id, req.tenantId, req.user.id, req.user.role, { arrivalDate, flightDate }, req.file
   );
   return ApiResponse.success(res, application, 'Arrival updated');
-});
-
-const getMdacEligibility = asyncHandler(async (req, res) => {
-  const mdac = await mdacService.getEligibility(req.params.id, req.tenantId, req.user);
-  return ApiResponse.success(res, mdac);
-});
-
-const markMdacNotRequired = asyncHandler(async (req, res) => {
-  const application = await mdacService.markNotRequired(req.params.id, req.tenantId, req.user, req.body.notes);
-  return ApiResponse.success(res, application, 'MDAC marked as not required');
-});
-
-const markMdacSubmitted = asyncHandler(async (req, res) => {
-  const application = await mdacService.markSubmitted(req.params.id, req.tenantId, req.user, req.body.notes);
-  return ApiResponse.success(res, application, 'MDAC marked as submitted');
-});
-
-const uploadMdacProof = asyncHandler(async (req, res) => {
-  if (!req.file) return ApiResponse.error(res, 'MDAC proof file is required', 400);
-  const application = await mdacService.uploadProof(req.params.id, req.tenantId, req.user, req.file, req.body.notes);
-  return ApiResponse.success(res, application, 'MDAC proof uploaded');
-});
-
-const verifyMdac = asyncHandler(async (req, res) => {
-  const application = await mdacService.verify(req.params.id, req.tenantId, req.user, req.body);
-  return ApiResponse.success(res, application, req.body.action === 'review' ? 'MDAC marked for review' : 'MDAC verified');
 });
 
 const uploadEvisa = asyncHandler(async (req, res) => {
@@ -216,12 +190,22 @@ const deleteApplication = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, 'Application deleted');
 });
 
+const restoreApplication = asyncHandler(async (req, res) => {
+  const application = await applicationService.restoreApplication(req.params.id, req.tenantId);
+  return ApiResponse.success(res, application, 'Application restored');
+});
+
+const permanentlyDeleteApplication = asyncHandler(async (req, res) => {
+  await applicationService.permanentlyDeleteApplication(req.params.id, req.tenantId);
+  return ApiResponse.success(res, null, 'Application permanently deleted');
+});
+
 module.exports = {
-  createApplication, listApplications, listMdacRecords, getApplication, updateApplication,
+  createApplication, listApplications, getApplication, updateApplication,
   acceptApplication, updateStatus, uploadOfferLetter, uploadPaymentProof,
   verifyPayment, issueInvoice, updateEmgsProgress, updatePostEvalStatus,
   updateArrival, uploadEvisa, uploadEmgsApproval, uploadEvalApproval,
   uploadTuitionProof, verifyTuition, setCommissionStatus,
-  getMdacEligibility, markMdacNotRequired, markMdacSubmitted, uploadMdacProof, verifyMdac,
   addNote, getNotes, getStatusHistory, deleteApplication,
+  listDeletedApplications, restoreApplication, permanentlyDeleteApplication,
 };

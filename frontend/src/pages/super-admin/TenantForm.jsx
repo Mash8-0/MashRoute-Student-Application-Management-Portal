@@ -337,9 +337,8 @@ export default function TenantForm() {
               <CardHeader><CardTitle>Initial Admin Account</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  This becomes the tenant's login and is active immediately. If you leave the email
-                  blank, the company email is used; if you leave the password blank, it defaults to
-                  <span className="font-mono"> Admin@123!</span>.
+                  This becomes the tenant&apos;s login and is active immediately. If you leave the email
+                  blank, the company email is used. A unique password of at least 12 characters is required.
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Admin First Name" error={errors.adminFirstName?.message}>

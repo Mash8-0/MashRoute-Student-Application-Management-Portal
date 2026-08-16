@@ -10,6 +10,7 @@ import { applicationAPI, documentAPI, loeAPI } from '../../api/endpoints';
 import LOEActions from '../../components/loe/LOEActions';
 import StudentAvatar from '../../components/common/StudentAvatar';
 import ArrivalCard from '../../components/documents/ArrivalCard';
+import EmgsPaymentSetupModal from '../../components/payments/EmgsPaymentSetupModal';
 import { STAGES } from '../../lib/documentStages';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from '../../components/ui/toast';
@@ -442,6 +443,7 @@ export default function ApplicationDetail() {
   const [previewFile, setPreviewFile] = useState(null); // { url, label }
   const [emailPreview, setEmailPreview] = useState(null);
   const [emailPreviewWidth, setEmailPreviewWidth] = useState('desktop');
+  const [showEmgsPaymentSetup, setShowEmgsPaymentSetup] = useState(false);
 
   const isAdmin = ADMIN_ROLES.includes(user?.role);
   const isEmgsStage = application?.invoiceIssuedAt;
@@ -588,9 +590,14 @@ export default function ApplicationDetail() {
       const res = await applicationAPI.uploadOfferLetter(id, fd);
       setApplication(res.data.data);
       setShowUploadOL(false);
-      toast.success('Offer Letter uploaded. Preview the notification before sending.');
-      const preview = await applicationAPI.previewOfferLetterIssuedEmail(id);
-      setEmailPreview(preview.data.data);
+      toast.success('Offer Letter uploaded successfully');
+      try {
+        await applicationAPI.retryOfferLetterIssuedEmail(id);
+        toast.success('Offer Letter Issued notification sent');
+      } catch (emailError) {
+        toast.error(emailError.response?.data?.message || 'Offer Letter saved, but the notification could not be sent');
+      }
+      setShowEmgsPaymentSetup(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Upload failed');
     } finally {
@@ -919,6 +926,13 @@ export default function ApplicationDetail() {
 
   return (
     <div className="space-y-6">
+      {showEmgsPaymentSetup && application && (
+        <EmgsPaymentSetupModal
+          application={application}
+          onClose={() => setShowEmgsPaymentSetup(false)}
+          onConfigured={() => fetchApplication(true)}
+        />
+      )}
       {emailPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
           <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
@@ -1070,8 +1084,10 @@ export default function ApplicationDetail() {
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <InfoRow label="University" value={app.university?.name} />
               <InfoRow label="Country" value={app.country} />
+              <InfoRow label="Campus" value={app.campus || app.intakeRecord?.campusName || app.campusCode} />
+              <InfoRow label="Level" value={app.intakeRecord?.studyLevel} />
               <InfoRow label="Program" value={app.program} />
-              <InfoRow label="Intake" value={`${app.intake || ''} ${app.intakeYear || ''}`.trim() || undefined} />
+              <InfoRow label="Intake" value={app.intake || app.intakeYear?.toString()} />
               <InfoRow label="Priority" value={app.priority} />
               <InfoRow label="Agent" value={app.agent ? `${app.agent.firstName} ${app.agent.lastName}` : undefined} />
               <InfoRow label="Submitted" value={formatDate(app.submittedAt)} />
@@ -1501,7 +1517,7 @@ export default function ApplicationDetail() {
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
               >
                 <SectionCard title="Arrival" icon={PlaneLanding}>
-                  <ArrivalCard application={app} canEdit={canUpload} userRole={user?.role} onRefresh={fetchApplication} />
+                  <ArrivalCard application={app} canEdit={canUpload} onRefresh={fetchApplication} />
                 </SectionCard>
               </motion.div>
             )}

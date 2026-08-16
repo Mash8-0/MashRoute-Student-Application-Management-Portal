@@ -422,8 +422,8 @@ class ApplicationService {
 
     const application = await this._assertExists(id, tenantId);
 
-    if (application.status !== 'OFFER_LETTER_ISSUED') {
-      throw { statusCode: 400, message: 'Offer Letter can only be uploaded when status is "Offer Letter Issued"' };
+    if (!['AWAITING_OFFER_LETTER', 'OFFER_LETTER_ISSUED'].includes(application.status)) {
+      throw { statusCode: 400, message: 'Offer Letter can only be uploaded when awaiting or issuing the Offer Letter' };
     }
 
     if (file.mimetype !== 'application/pdf' || path.extname(file.originalname || '').toLowerCase() !== '.pdf') {
@@ -455,12 +455,17 @@ class ApplicationService {
     const updated = await prisma.application.update({
       where: { id },
       data: {
+        status: 'OFFER_LETTER_ISSUED',
+        progressPct: STATUS_PROGRESS.OFFER_LETTER_ISSUED,
         offerLetterUrl: fileUrl,
         offerLetterUploadedById: userId,
         offerLetterUploadedAt: new Date(),
       },
       include: this._detailInclude(),
     });
+    if (application.status !== 'OFFER_LETTER_ISSUED') {
+      await this._recordStatusHistory(id, userId, application.status, 'OFFER_LETTER_ISSUED', 'Offer Letter uploaded successfully');
+    }
     whatsapp.notify('offer_letter_uploaded', updated);
     return updated;
   }
