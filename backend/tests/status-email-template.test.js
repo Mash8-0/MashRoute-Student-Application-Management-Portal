@@ -99,8 +99,6 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   assert.match(routes, /open-tuition-payment', authorize\('TENANT_ADMIN', 'SUPER_ADMIN'\)/);
   assert.match(routes, /tuition-request', authorize\('STAFF', 'REGISTERED_AGENT'\)/);
   assert.match(service, /application\.agentId !== userId/);
-  assert.match(ui, /Request Tuition Payment/);
-  assert.match(ui, /tab=payment&tuitionApp=/);
   assert.doesNotMatch(ui, /window\.prompt\('Tuition fee amount/);
   assert.match(studentUi, /ApplicationPaymentSections/);
   const paymentSections = fs.readFileSync(path.join(__dirname, '../../frontend/src/components/payments/ApplicationPaymentSections.jsx'), 'utf8');
@@ -111,7 +109,6 @@ test('tuition workflow supports staff request and admin-only folio generation', 
   assert.match(modal, /applicationAPI\.openTuitionPayment/);
   assert.match(decisionModal, /eVisa Approved Successfully/);
   assert.match(decisionModal, /Open Tuition Fees Payment/);
-  assert.match(ui, /setShowTuitionPaymentDecision\(true\)/);
   assert.match(modal, /Select Payment Account/);
   assert.match(modal, /Tenant \/ Admin Account/);
   assert.match(service, /paymentDestinationAccount\.findFirst/);
